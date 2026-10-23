@@ -53,6 +53,12 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
    bildirilir. Rota önbelleğinde yalnızca değişen kenarları kullanan kayıtlar geçersiz kılınır.
    Geçersizleşen rotalar yeniden planlanır.
 
+- **Çapraz yollar** (`diagonalRuns`, `centerline`): Izgara 4 yönlü kalır; çapraz sürükleme bir merdiven
+  (doğu, güney, doğu, güney …) üretir. En az üç ardışık dönüşümlü adım düz 45° bir çizgiye çevrilir:
+  araçlar o çizgide gider, yol öyle çizilir ve kenar uzunluğu gerçek (kısa) uzunluktur. Zincirin ilk ve
+  son adımı düz kalır; böylece kavşaklara hep dik girilir. `stepPos`, her hücrenin çizgi üzerindeki
+  konumunu tutar; ağ yeniden kurulunca araçlar bu konumla yeni kenara taşınır.
+
 ## Araç dinamiği
 
 - **IDM** (Intelligent Driver Model): istenen hız, güvenli zaman aralığı (1,2 sn), en küçük boşluk

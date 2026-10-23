@@ -415,7 +415,7 @@ export class Renderer {
     const s = this.session;
     if (!s || !this.paths) return;
     this.paths.clear();
-    drawRoads(this.roads, s.sim.grid, this.theme);
+    drawRoads(this.roads, s.sim.grid, this.theme, s.sim.graph);
     this.drawSigns();
     drawBuildings(this.buildings, s.sim.buildings, s.sim.grid.width, this.theme);
     this.overlayTimer = 0;

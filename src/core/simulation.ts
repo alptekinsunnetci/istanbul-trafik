@@ -368,17 +368,22 @@ export class Simulation {
       if (v.lane >= same.lanes) v.lane = same.lanes - 1;
       return true;
     }
-    const C = GEOM.cellSize;
     const R = GEOM.junctionRadius;
     const steps = oldEdge.cells.length - 1;
     const u = v.s + R;
-    const k = Math.min(Math.max(Math.floor(u / C), 0), steps - 1);
-    const f = u - k * C;
+    // The cell step the vehicle is on and how far along it (diagonal steps are shorter than a cell).
+    const pos = oldEdge.stepPos;
+    let k = 0;
+    while (k < steps - 1 && (pos[k + 1] as number) <= u) k++;
+    const oldStep = Math.max(1e-6, (pos[k + 1] as number) - (pos[k] as number));
+    const f = Math.min(Math.max((u - (pos[k] as number)) / oldStep, 0), 1);
     const ref = next.steps.get(RoadGraph.stepKey(oldEdge.cells[k] as number, oldEdge.cells[k + 1] as number));
     if (!ref) return false;
     const ne = next.edge(ref.edge) as GraphEdge;
+    const a = ne.stepPos[ref.index] as number;
+    const b = ne.stepPos[ref.index + 1] as number;
     v.edge = ne.id;
-    v.s = Math.min(Math.max(ref.index * C + f - R, 0), ne.length);
+    v.s = Math.min(Math.max(a + f * (b - a) - R, 0), ne.length);
     v.lane = Math.min(v.lane, ne.lanes - 1);
     if (v.laneChange && v.laneChange.to >= ne.lanes) v.laneChange = null;
     v.route = [ne.id, ...v.route.slice(v.routeIndex + 1)];
@@ -405,7 +410,7 @@ export class Simulation {
     // The node became a plain road cell: continue on the edge through it.
     v.junction = null;
     v.edge = ne.id;
-    v.s = Math.min(Math.max(ref.index * GEOM.cellSize - GEOM.junctionRadius, 0), ne.length);
+    v.s = Math.min(Math.max((ne.stepPos[ref.index] as number) - GEOM.junctionRadius, 0), ne.length);
     v.lane = Math.min(pass.toLane, ne.lanes - 1);
     v.route = [ne.id, ...tail];
     v.routeIndex = 0;

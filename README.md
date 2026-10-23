@@ -29,6 +29,8 @@ yeni renkler eklenir.
   haritada hazırdır, hızlıdır ve silinemez. Harita kenarından gri araçlar gelir: çoğu şehirden geçip
   gider, bir kısmı otoyola bağladığın ev ve iş yerlerine girer, bir kısmı da iş yerlerinden çıkıp
   otoyola katılır. Skora sayılmazlar ama yolları doldururlar.
+- **Çapraz yollar:** Çapraz sürüklediğin yol 45° düz bir yol olarak kurulur; araçlar da çaprazdan
+  gider ve yol gerçekten kısalır.
 - **Otoyol kavşakları ve üst geçit:** Yolunu otoyolun üstünde bitirirsen ya da orada dönersen otoyola
   bağlanır: kavşakta katılma ve ayrılma şeritleri vardır, ana yol önceliklidir. Sağa dönüp katılan araç
   yalnızca katılacağı şeritte araç gelirken bekler. Otoyolun üstünden düz geçen yol ise kavşak yapmadan
@@ -60,6 +62,10 @@ yeni renkler eklenir.
 | Beyoğlu: Haliç üstünde bir martı ve ışıklı kavşak                              | Sarıyer: Boğaz ve mevsimle gelen haftalık ödül                           |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
 | ![Beyoğlu'nda Tarlabaşı Bulvarı, Haliç ve martı](docs/screenshots/beyoglu.png) | ![Sarıyer'de 2. hafta: yaz ve ödül seçimi](docs/screenshots/sariyer.png) |
+
+| Kadıköy: çapraz yollar, Kurbağalıdere ve D-100                               |
+| ---------------------------------------------------------------------------- |
+| ![Kadıköy'de 45° çapraz yollar ve dere](docs/screenshots/kadikoy-capraz.png) |
 
 | Ana menü: 12 ilçe                                                                |
 | -------------------------------------------------------------------------------- |
@@ -148,6 +154,7 @@ npm run test:e2e
 | Kontrol                                    | İşlev                                              |
 | ------------------------------------------ | -------------------------------------------------- |
 | Binadan başlayıp diğer binaya sürükle      | Yol çiz; uçlar binaların girişine yapışır          |
+| Çapraz sürükle                             | 45° çapraz yol                                     |
 | Geri al düğmesi, `Ctrl+Z`                  | Son çizimi geri al, parçalar geri gelir            |
 | Sil düğmesi ya da sağ tık + sürükle        | Yolu sil, parçalar geri gelir                      |
 | Işık düğmesi, sonra kavşağa dokun          | Trafik ışığı koy; tekrar dokununca kalkar          |

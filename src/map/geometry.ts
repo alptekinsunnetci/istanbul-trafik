@@ -22,6 +22,65 @@ function cellCenter(grid: Grid, i: number): [number, number] {
   return [(grid.cx(i) + 0.5) * GEOM.cellSize, (grid.cy(i) + 0.5) * GEOM.cellSize];
 }
 
+/**
+ * Diagonal stretches of a cell chain: a staircase of at least three
+ * alternating steps (e.g. east, south, east, south) is driven and drawn as a
+ * straight 45° line. Returned as [first cell, last cell] index pairs; every
+ * diagonal covers an even number of steps. The first and the last step of a
+ * chain stay straight, so roads always leave and enter junctions head-on.
+ */
+export function diagonalRuns(dirs: readonly Dir[]): [number, number][] {
+  const m = dirs.length;
+  const runs: [number, number][] = [];
+  let i = 1;
+  while (i < m - 1) {
+    let L = 1;
+    while (i + L < m - 1 && dirs[i + L] !== dirs[i + L - 1] && (L < 2 || dirs[i + L] === dirs[i + L - 2]))
+      L++;
+    if (L >= 3) {
+      const span = Math.floor(L / 2) * 2;
+      runs.push([i, i + span]);
+      i += span;
+    } else i++;
+  }
+  return runs;
+}
+
+export interface Centerline {
+  /** Polyline vertices (cell centres; cells inside a diagonal are skipped). */
+  xs: number[];
+  ys: number[];
+  /** Distance along the polyline of every cell of the chain (spread evenly for skipped cells). */
+  stepPos: number[];
+  length: number;
+}
+
+/** Centre line of a cell chain with its staircases straightened into diagonals. */
+export function centerline(grid: Grid, cells: readonly number[], dirs: readonly Dir[]): Centerline {
+  const inside = new Uint8Array(cells.length);
+  for (const [a, b] of diagonalRuns(dirs)) for (let k = a + 1; k < b; k++) inside[k] = 1;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  const stepPos: number[] = new Array<number>(cells.length).fill(0);
+  let len = 0;
+  let last = -1;
+  for (let k = 0; k < cells.length; k++) {
+    if (inside[k]) continue;
+    const [x, y] = cellCenter(grid, cells[k] as number);
+    if (last >= 0) {
+      const seg = Math.hypot(x - (xs[xs.length - 1] as number), y - (ys[ys.length - 1] as number));
+      // Cells skipped by a diagonal lie evenly along it.
+      for (let j = last + 1; j < k; j++) stepPos[j] = len + (seg * (j - last)) / (k - last);
+      len += seg;
+    }
+    stepPos[k] = len;
+    xs.push(x);
+    ys.push(y);
+    last = k;
+  }
+  return { xs, ys, stepPos, length: len };
+}
+
 /** Unit normal pointing to the right of direction d in screen space. */
 function rightNormal(d: Dir): [number, number] {
   return [-(DY[d] as number), DX[d] as number];
@@ -30,29 +89,40 @@ function rightNormal(d: Dir): [number, number] {
 export function buildLanePath(grid: Grid, edge: GraphEdge, lane: number): LanePath {
   const off = laneOffset(edge, lane);
   const R = GEOM.junctionRadius;
+  const line = centerline(grid, edge.cells, edge.dirs);
+  const vx = line.xs;
+  const vy = line.ys;
+  const last = vx.length - 1;
+  // Right-hand normal of every polyline segment.
+  const nx: number[] = [];
+  const ny: number[] = [];
+  for (let k = 0; k < last; k++) {
+    const dx = (vx[k + 1] as number) - (vx[k] as number);
+    const dy = (vy[k + 1] as number) - (vy[k] as number);
+    const l = Math.hypot(dx, dy) || 1;
+    nx.push(-dy / l);
+    ny.push(dx / l);
+  }
   const px: number[] = [];
   const py: number[] = [];
-  const [sx, sy] = cellCenter(grid, edge.cells[0] as number);
   const d0 = edge.dirs[0] as Dir;
   const [n0x, n0y] = rightNormal(d0);
-  px.push(sx + (DX[d0] as number) * R + n0x * off);
-  py.push(sy + (DY[d0] as number) * R + n0y * off);
-  for (let k = 1; k < edge.cells.length - 1; k++) {
-    const a = edge.dirs[k - 1] as Dir;
-    const b = edge.dirs[k] as Dir;
-    if (a === b) continue;
-    const [cx, cy] = cellCenter(grid, edge.cells[k] as number);
-    const [ax, ay] = rightNormal(a);
-    const [bx, by] = rightNormal(b);
-    // Miter join for a 90° corner.
-    px.push(cx + (ax + bx) * off);
-    py.push(cy + (ay + by) * off);
+  px.push((vx[0] as number) + (DX[d0] as number) * R + n0x * off);
+  py.push((vy[0] as number) + (DY[d0] as number) * R + n0y * off);
+  for (let k = 1; k < last; k++) {
+    const ax = nx[k - 1] as number;
+    const ay = ny[k - 1] as number;
+    const bx = nx[k] as number;
+    const by = ny[k] as number;
+    // Miter join: exact for straight, 45° and 90° bends.
+    const m = off / (1 + ax * bx + ay * by);
+    px.push((vx[k] as number) + (ax + bx) * m);
+    py.push((vy[k] as number) + (ay + by) * m);
   }
-  const [ex, ey] = cellCenter(grid, edge.cells[edge.cells.length - 1] as number);
   const dl = edge.lastDir;
   const [nlx, nly] = rightNormal(dl);
-  px.push(ex - (DX[dl] as number) * R + nlx * off);
-  py.push(ey - (DY[dl] as number) * R + nly * off);
+  px.push((vx[last] as number) - (DX[dl] as number) * R + nlx * off);
+  py.push((vy[last] as number) - (DY[dl] as number) * R + nly * off);
 
   const n = px.length;
   const xs = new Float64Array(px);

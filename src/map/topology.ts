@@ -1,4 +1,5 @@
 import { GEOM, ROAD } from '../core/constants';
+import { centerline } from './geometry';
 import { DIRS, type Dir, type Grid, opposite } from './grid';
 import { type GraphEdge, type GraphNode, RoadGraph } from './road-graph';
 
@@ -154,7 +155,8 @@ function addEdge(grid: Grid, graph: RoadGraph, cells: number[], dirs: Dir[]): vo
       ? (grid.lanes[interior[0] as number] as number)
       : Math.min(grid.lanes[from] as number, grid.lanes[to] as number);
   const steps = cells.length - 1;
-  const centerLength = steps * GEOM.cellSize;
+  const line = centerline(grid, cells, dirs);
+  const centerLength = line.length;
   const length = centerLength - 2 * GEOM.junctionRadius;
   const highway = interior.length > 0 && interior.every((c) => grid.isHighway(c));
   const speedLimit = highway ? ROAD.highwaySpeed : lanes >= 2 ? ROAD.boulevardSpeed : ROAD.streetSpeed;
@@ -170,6 +172,7 @@ function addEdge(grid: Grid, graph: RoadGraph, cells: number[], dirs: Dir[]): vo
     lanes: Math.max(1, lanes),
     length,
     centerLength,
+    stepPos: line.stepPos,
     speedLimit,
     freeFlowTime: centerLength / speedLimit,
     twin: null,

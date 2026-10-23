@@ -34,8 +34,10 @@ export interface GraphEdge {
   lanes: number;
   /** Drivable length between the two junction boxes. */
   length: number;
-  /** Node-centre to node-centre length. */
+  /** Node-centre to node-centre length (diagonals count with their real, shorter length). */
   centerLength: number;
+  /** Distance along the centre line of every cell of `cells`, from the start node. */
+  stepPos: number[];
   speedLimit: number;
   freeFlowTime: number;
   twin: string | null;

@@ -1,6 +1,8 @@
 import type { Graphics } from 'pixi.js';
 import { GEOM } from '../core/constants';
+import { diagonalRuns } from '../map/geometry';
 import { DIRS, DX, DY, type Dir, type Grid, opposite } from '../map/grid';
+import type { RoadGraph } from '../map/road-graph';
 import type { Theme } from './theme';
 
 const C = GEOM.cellSize;
@@ -20,12 +22,13 @@ function center(grid: Grid, i: number): [number, number] {
 }
 
 /**
- * Roads as thick rounded lines between connected cell centres. Only
+ * Roads as thick rounded lines between connected cell centres; staircases
+ * are drawn as straight diagonals (the way vehicles drive them). Only
  * one-way arrows are drawn as markings; bridges get a dark outline.
  * Highways are wider, with a light edge and a dashed centre line, and run
  * on past the map edge at their gateways.
  */
-export function drawRoads(g: Graphics, grid: Grid, theme: Theme): void {
+export function drawRoads(g: Graphics, grid: Grid, theme: Theme, graph?: RoadGraph): void {
   g.clear();
   const streets: [number, number][] = [];
   const boulevards: [number, number][] = [];
@@ -38,6 +41,25 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme): void {
   const highwayBridges: [number, number][] = [];
   const lone: number[] = [];
 
+  // Diagonals: one straight segment instead of the staircase of cell steps they replace.
+  const covered = new Set<number>();
+  const pairKey = (a: number, b: number): number => Math.min(a, b) * grid.size + Math.max(a, b);
+  for (const edge of graph?.edgeList ?? []) {
+    if (edge.twin !== null && edge.twin < edge.id) continue;
+    for (const [a, b] of diagonalRuns(edge.dirs)) {
+      const from = edge.cells[a] as number;
+      const to = edge.cells[b] as number;
+      let water = false;
+      for (let k = a; k < b; k++) {
+        covered.add(pairKey(edge.cells[k] as number, edge.cells[k + 1] as number));
+        if (grid.isBridge(edge.cells[k] as number)) water = true;
+      }
+      if (grid.isBridge(to)) water = true;
+      (edge.lanes === 2 ? boulevards : streets).push([from, to]);
+      if (water) bridges.push([from, to]);
+    }
+  }
+
   for (let i = 0; i < grid.size; i++) {
     if (!grid.isRoad(i)) continue;
     let connections = 0;
@@ -46,6 +68,7 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme): void {
       connections++;
       const n = grid.neighbor(i, d);
       if (n < i) continue; // each connection once
+      if (covered.has(pairKey(i, n))) continue;
       const wide = grid.lanes[i] === 2 && grid.lanes[n] === 2;
       if (grid.isHighway(i) !== grid.isHighway(n)) {
         const [h, s, dir] = grid.isHighway(i) ? [i, n, d] : [n, i, opposite(d)];
@@ -182,7 +205,7 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme): void {
     for (const d of DIRS) {
       if (!grid.connected(i, d) || !grid.hasLink(i, d)) continue;
       const n = grid.neighbor(i, d);
-      if (grid.hasLink(n, opposite(d))) continue;
+      if (grid.hasLink(n, opposite(d)) || covered.has(pairKey(i, n))) continue;
       const [cx, cy] = center(grid, i);
       const dx = DX[d] as number;
       const dy = DY[d] as number;
