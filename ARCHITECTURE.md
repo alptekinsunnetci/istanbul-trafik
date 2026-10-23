@@ -156,22 +156,23 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
 `npm run bench`, performans testinin yanında basit bir **denge botu** (`tests/perf/bot.ts`) çalıştırır. Bot
 her 2 sn'de bir, kendi renginde iş yerine ulaşamayan evleri ve hiçbir evin ulaşamadığı iş yerlerini en
 yakın uygun binaya bağlar (önce kuru yoldan, yoksa köprüyle), kalabalık bir kavşağa ışık koyar ve
-ödülleri ihtiyaca göre seçer. Her ilçe, her modda aynı tohumla (11) en çok 1500 sn oynanır.
+ödülleri ihtiyaca göre seçer. Her ilçe, her modda en çok 1500 sn oynanır.
 
 Son ölçüm: her ilçe ve mod için 3 tohum (11, 23, 37); oyunun bittiği saniyenin ortancası. Bot insan
-oyuncudan zayıftır ve yeni araçları (göbek, hat) kullanmaz, olaylar ve günün saati ise açıktır.
+oyuncudan zayıftır; kalabalık kavşaklara göbek koyar ve uzak/karşı kıyıdaki iş yerleri için vapur veya
+metro hattı açar. Olaylar ve günün saati açıktır.
 
-| Mod    | En kısa ortanca | En uzun ortanca | Not                                           |
-| ------ | --------------- | --------------- | --------------------------------------------- |
-| Rahat  | 1500 (hepsi)    | 1500            | Oyun bitmez; skor ortancası 1118–1844         |
-| Normal | 409 (Şişli)     | 745 (Bakırköy)  | 12 ilçenin 10'unda ortanca 520 sn'nin üstünde |
-| Zor    | 264 (Şişli)     | 574 (Maltepe)   | En kısa tek oyun 215 sn (Beykoz)              |
+| Mod    | En kısa ortanca | En uzun ortanca | Not                                            |
+| ------ | --------------- | --------------- | ---------------------------------------------- |
+| Rahat  | 1500 (hepsi)    | 1500            | Oyun bitmez; skor ortancası 765–2003           |
+| Normal | 527 (Bağcılar)  | 822 (Beykoz)    | 12 ilçenin hepsinde ortanca 520 sn'nin üstünde |
+| Zor    | 340 (Şişli)     | 566 (Üsküdar)   | En kısa tek oyun 219 sn (Beykoz)               |
 
 Bu ölçümlere göre yapılan ayarlar: Normal modda taşma süresi 60 → 75 sn; başlangıç köprüsü 4 → 6
 (köprüler üst geçitte de kullanılır); ilk mahalle ve her yeni rengin ilk evi iş yeriyle aynı kıyıda
 kurulur; karşı kıyıda bina 2. haftadan önce çıkmaz; Bakırköy'de Ayamama Deresi biraz doğuya alındı;
 en zor çıkan Şişli'nin talebi 1,2 → 1,1, "kolay" olduğu halde Zor'da erken biten Beykoz'unki 0,85 → 0,8.
-Bu son iki ayardan sonra ölçüm tekrarlanmadı.
+Tablo bu ayarlardan sonraki ölçümdür.
 
 ## Toplu taşıma, göbek, günün saati ve olaylar
 
