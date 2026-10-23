@@ -136,6 +136,17 @@ export class Inspector {
     if (!b) return false;
     this.root.hidden = false;
     this.title.textContent = b.name;
+    if (b.transit) {
+      const t = b.transit;
+      const onBoard = t.riders.filter((r) => r.readyAt > session.sim.time).length;
+      rowsTo(this.dl, [
+        ['Tür', t.mode === 'vapur' ? 'Vapur iskelesi' : 'Metro istasyonu'],
+        ['Hatta yolcu', formatNumber(onBoard)],
+        ['Taksi/otobüs bekleyen', formatNumber(t.riders.length - onBoard + b.pending.length)],
+        ['Karşı durak', session.sim.buildingById(t.partner)?.name ?? '—'],
+      ]);
+      return true;
+    }
     if (b.kind === 'kapi') {
       rowsTo(this.dl, [
         ['Tür', BUILDING_TYPES[b.kind].label],

@@ -30,7 +30,27 @@ yeni renkler eklenir.
   gider, bir kısmı otoyola bağladığın ev ve iş yerlerine girer, bir kısmı da iş yerlerinden çıkıp
   otoyola katılır. Skora sayılmazlar ama yolları doldururlar.
 - **Çapraz yollar:** Çapraz sürüklediğin yol 45° düz bir yol olarak kurulur; araçlar da çaprazdan
-  gider ve yol gerçekten kısalır.
+  gider ve yol gerçekten kısalır. Çapraz bir adım, düz bir adım kadar (1 yol parçası) tutar.
+- **Vapur ve metro hatları:** Hat aracıyla iki yer arasında sürükle: su üstünden geçen hat vapur
+  (iki iskele), karadaki hat metro (iki istasyon) olur. Hattın bir ucuna yürüme mesafesindeki evlerin
+  yolcuları arabaya binmez, yürür; vapur ya da metro tarifeyle (vapur 15 sn, metro 8 sn arayla) gelir ve
+  hepsini birlikte indirir. Karşı durakta aynı iş yerine giden 3 ve daha fazla yolcu tek bir
+  **otobüse**, diğerleri birer **taksiye** biner: otobüs trafiği azaltır, taksiler durak çevresini
+  doldurur. Otobüs, taşıdığı her yolcu için puan getirir. Yolda ya da durakta bekleyen yolcular iş
+  yerinin raptiyelerinde sayılır.
+- **Göbekli kavşak:** Göbek aracıyla bir kavşağa dokun: araçlar durmadan, yavaşlayarak girer ve adanın
+  çevresinden döner. Yoğun bir kavşakta yol vermeli kavşaktan hızlıdır.
+- **Günün saati:** Her gün 06:00'da başlar; sabah ve akşam iş saatlerinde yolculuk artar, gece azalır ve
+  harita kararır. Saat üst çubukta görünür.
+- **Olaylar:** 3. haftadan sonra ara ara maç günü (bir iş yerine akın), yağmur (tüm araçlar yavaşlar)
+  ya da yol çalışması (bir yol bir süre kapalı) olur.
+- **Başarımlar ve günün haritası:** 17 başarım (ilk köprü, ilk üst geçit, 10 martı …) menüden
+  izlenir. Günün haritası herkes için aynı ilçe ve aynı tohumdur, her gün değişir; sonucu "Paylaş" ile
+  paylaşabilirsin.
+- **Araçlar:** Otomobil, taksi (sarı tepe lambası), dolmuş (beyaz tavan) ve otobüs ayrı görünür.
+- **Müzik ve çevrimdışı oyun:** Hicaz makamında sakin, tarayıcıda üretilen bir arka plan müziği
+  (ayarlardan açılıp kısılır). Oyun bir kez açıldıktan sonra internetsiz de çalışır ve telefona
+  uygulama gibi eklenebilir.
 - **Otoyol kavşakları ve üst geçit:** Yolunu otoyolun üstünde bitirirsen ya da orada dönersen otoyola
   bağlanır: kavşakta katılma ve ayrılma şeritleri vardır, ana yol önceliklidir. Sağa dönüp katılan araç
   yalnızca katılacağı şeritte araç gelirken bekler. Otoyolun üstünden düz geçen yol ise kavşak yapmadan
@@ -44,7 +64,8 @@ yeni renkler eklenir.
   ulaşırsın. Suyu olmayan Şişli'de köprüler üst geçit için kullanılır.
 - **Mevsimler:** Her hafta mevsim değişir (ilkbahar, yaz, sonbahar, kış); zemin, park ve su renkleri
   mevsime göre döner. Dereler ve kıyılar adlarıyla yazılır, deniz adları alan oraya ulaşmadan görünür.
-- **Haftalık ödüller:** +15 yol, +5 köprü, +10 bulvar ya da +2 trafik ışığı.
+- **Haftalık ödüller:** +15 yol, +5 köprü, +10 bulvar, +2 trafik ışığı, +2 göbek ya da +1 vapur/metro
+  hattı.
 - **Şehir hayatı:** D-100 ve O-1'de belli aralıklarla kendi şeridinde metrobüs geçer. Boğaz'ın ve
   denizin üstünde ara ara martılar uçar ve öter; martıya dokunursan +2 yol parçası kazanırsın. Trafik
   çok sıkışınca kornalar duyulur, ama sınırlıdır: birkaç kez çalar, sıkışıklık geçene kadar susar.
@@ -62,6 +83,10 @@ yeni renkler eklenir.
 | Beyoğlu: Haliç üstünde bir martı ve ışıklı kavşak                              | Sarıyer: Boğaz ve mevsimle gelen haftalık ödül                           |
 | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
 | ![Beyoğlu'nda Tarlabaşı Bulvarı, Haliç ve martı](docs/screenshots/beyoglu.png) | ![Sarıyer'de 2. hafta: yaz ve ödül seçimi](docs/screenshots/sariyer.png) |
+
+| Kadıköy: metro hattı, göbekli kavşak, martı ve saat                                                        |
+| ---------------------------------------------------------------------------------------------------------- |
+| ![Kadıköy'de metro istasyonları, göbek ve Kurbağalıdere üstünde martı](docs/screenshots/kadikoy-metro.png) |
 
 | Kadıköy: çapraz yollar, Kurbağalıdere ve D-100                               |
 | ---------------------------------------------------------------------------- |
@@ -158,18 +183,20 @@ npm run test:e2e
 | Geri al düğmesi, `Ctrl+Z`                  | Son çizimi geri al, parçalar geri gelir            |
 | Sil düğmesi ya da sağ tık + sürükle        | Yolu sil, parçalar geri gelir                      |
 | Işık düğmesi, sonra kavşağa dokun          | Trafik ışığı koy; tekrar dokununca kalkar          |
+| Göbek düğmesi, sonra kavşağa dokun         | Göbekli kavşak koy; tekrar dokununca kalkar        |
+| Hat düğmesi, iki yer arasında sürükle      | Vapur ya da metro hattı; durağa dokununca kalkar   |
 | Araca veya binaya dokunma                  | Ayrıntıları göster                                 |
 | Uçan martıya dokunma                       | +2 yol parçası                                     |
 | Tekerlek, `+` / `−`, iki parmakla kıstırma | Yakınlaştır / uzaklaştır                           |
 | Orta tık + sürükle, `W A S D`, iki parmak  | Haritayı kaydır                                    |
 | `Boşluk`                                   | Duraklat / devam                                   |
-| `1` · `2` · `3` · `4`                      | Yol · Bulvar · Silgi · Trafik ışığı                |
+| `1` … `6`                                  | Yol · Bulvar · Silgi · Işık · Göbek · Hat          |
 | `T` · `I` · `F`                            | Trafik katmanı · İstatistikler · Haritayı sığdır   |
 | `Esc` veya ←                               | Menü (istatistik, yeniden başlat, ayarlar, yardım) |
 
 - **Parçalar:** Her kara hücresi 1 yol parçası, her su hücresi ve her üst geçit 1 köprü parçası kullanır.
   Bulvar (iki şeritli, hızlı yol) mevcut yolun üstüne çizilir ve hücre başına 1 bulvar parçası kullanır.
-  6 köprü ve 2 trafik ışığıyla başlanır.
+  6 köprü, 2 trafik ışığı, 1 göbek ve 1 vapur/metro hattıyla başlanır.
 - Her hafta (90 sn) +20 yol parçası gelir ve iki ödülden biri seçilir (+15 yol, +5 köprü, +10 bulvar,
   +2 trafik ışığı). Oyun seçim yapılana kadar bekler.
 - **Su ve köprüler:** Dereler (Kurbağalıdere, Ayamama, Göksu, Sazlıdere), Haliç ve Boğaz'ın karşı

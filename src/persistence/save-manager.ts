@@ -152,6 +152,13 @@ export class SaveManager {
     return { newBest, write: this.write(STORAGE_KEYS.records, records), records };
   }
 
+  /** Applies a change to the stored records (achievements, counters, daily scores) and saves them. */
+  updateRecords(change: (records: Records) => void): { write: WriteResult; records: Records } {
+    const records = this.loadRecords().value;
+    change(records);
+    return { write: this.write(STORAGE_KEYS.records, records), records };
+  }
+
   hasSavedGame(): boolean {
     try {
       return (this.store?.getItem(STORAGE_KEYS.save) ?? null) !== null;

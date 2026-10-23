@@ -2,7 +2,7 @@ import type { Resources } from '../map/road-editor';
 import { formatNumber, h, icon } from './dom';
 
 /** The default action is drawing roads; a badge can arm the boulevard or the eraser. */
-export type Tool = 'road' | 'boulevard' | 'erase' | 'signal';
+export type Tool = 'road' | 'boulevard' | 'erase' | 'signal' | 'roundabout' | 'transit';
 
 export interface ToolbarActions {
   selectTool(tool: Tool): void;
@@ -63,6 +63,20 @@ export class Toolbar {
     'Trafik ışığı — seç, sonra bir kavşağa dokun (tekrar dokununca kalkar)',
     'lights-value',
   );
+  private roundabouts = badge(
+    'button',
+    'roundabout',
+    'Göbek',
+    'Göbekli kavşak — seç, sonra bir kavşağa dokun (tekrar dokununca kalkar)',
+    'roundabouts-value',
+  );
+  private lines = badge(
+    'button',
+    'ferry',
+    'Hat',
+    'Vapur/metro hattı — seç, iki yer arasında sürükle; bir durağa dokununca hat kalkar',
+    'lines-value',
+  );
   private erase = badge(
     'button',
     'erase',
@@ -82,6 +96,12 @@ export class Toolbar {
     this.lights.button.dataset.tool = 'signal';
     this.lights.button.setAttribute('aria-pressed', 'false');
     this.lights.button.addEventListener('click', () => actions.selectTool('signal'));
+    this.roundabouts.button.dataset.tool = 'roundabout';
+    this.roundabouts.button.setAttribute('aria-pressed', 'false');
+    this.roundabouts.button.addEventListener('click', () => actions.selectTool('roundabout'));
+    this.lines.button.dataset.tool = 'transit';
+    this.lines.button.setAttribute('aria-pressed', 'false');
+    this.lines.button.addEventListener('click', () => actions.selectTool('transit'));
     this.erase.button.dataset.tool = 'erase';
     this.erase.button.setAttribute('aria-pressed', 'false');
     this.erase.button.addEventListener('click', () => actions.selectTool('erase'));
@@ -106,6 +126,8 @@ export class Toolbar {
         this.bridges.root,
         this.boulevards.root,
         this.lights.root,
+        this.roundabouts.root,
+        this.lines.root,
         h('span', { class: 'dock-sep', 'aria-hidden': 'true' }),
         this.erase.root,
       ),
@@ -129,6 +151,14 @@ export class Toolbar {
     set(this.bridges, res.bridges);
     set(this.boulevards, res.boulevards);
     set(this.lights, res.lights);
+    set(this.roundabouts, res.roundabouts);
+    set(this.lines, res.lines);
+    const ln = this.lines.button as HTMLButtonElement;
+    ln.setAttribute('aria-pressed', String(tool === 'transit'));
+    ln.disabled = !editable;
+    const rb = this.roundabouts.button as HTMLButtonElement;
+    rb.setAttribute('aria-pressed', String(tool === 'roundabout'));
+    rb.disabled = !editable;
     const lt = this.lights.button as HTMLButtonElement;
     lt.setAttribute('aria-pressed', String(tool === 'signal'));
     // Lights can always be selected: placed ones can be taken away even with none left.

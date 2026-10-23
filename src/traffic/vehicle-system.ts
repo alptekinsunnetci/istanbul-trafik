@@ -8,6 +8,7 @@ import {
   STATS,
   VEHICLE_TYPES,
   type VehicleKind,
+  ROUNDABOUT,
 } from '../core/constants';
 import type { Random } from '../core/random';
 import { type Building, type TripFailureReason, isHighwayTrip } from '../core/world-state';
@@ -44,6 +45,8 @@ export interface TrailingHold {
 
 export interface TrafficWorld {
   readonly grid: Grid;
+  /** All speed limits are multiplied by this (rain slows traffic down). */
+  readonly speedScale: number;
   graph: RoadGraph;
   lanes: LaneManager;
   junctions: JunctionController;
@@ -69,7 +72,10 @@ interface Move {
 
 const KIND_KEYS = Object.keys(VEHICLE_TYPES) as VehicleKind[];
 const KIND_WEIGHTS = KIND_KEYS.map((k) => VEHICLE_TYPES[k].weight);
-const MAX_LENGTH = Math.max(...KIND_KEYS.map((k) => VEHICLE_TYPES[k].length));
+/** Longest vehicle that can be picked at random (buses are only sent on purpose). */
+const MAX_LENGTH = Math.max(
+  ...KIND_KEYS.filter((k) => VEHICLE_TYPES[k].weight > 0).map((k) => VEHICLE_TYPES[k].length),
+);
 /** Departure speed when the lane ahead of a door is clear. */
 const SPAWN_SPEED = 5;
 
@@ -285,7 +291,7 @@ export class VehicleSystem {
   private mustYield(edge: GraphEdge, mv: Move, near: Map<number, number>): boolean {
     const w = this.w;
     const node = edge.to;
-    if (w.junctions.signal(node)) return false;
+    if (w.junctions.signal(node) || w.grid.roundabout[node] === 1) return false;
     const n = w.graph.node(node);
     if (!n || n.degree < 3) return false;
     const grid = w.grid;
@@ -323,6 +329,8 @@ export class VehicleSystem {
       // No light and traffic on the crossing road: slow down and look first.
       if (this.mustYield(edge, mv, near) && (dist > JUNCTION.yieldDistance || v.v > JUNCTION.yieldSpeed))
         continue;
+      // Roundabout: slow down to enter, but no need to stop.
+      if (w.grid.roundabout[edge.to] === 1 && v.v > ROUNDABOUT.entrySpeed) continue;
       // Prefer reaching a suitable lane first; fall back to any lane at the stop line.
       if (!lanesForTurn(edge.lanes, mv.turn).includes(v.lane) && dist > 8) continue;
       const exitLane = exitLaneFor(mv.turn, v.lane, mv.next.lanes);
@@ -365,7 +373,7 @@ export class VehicleSystem {
         zones: ALL_ZONES,
         key: `spawn:${b.id}`,
         exitLaneKey: laneKey(first.index, 0),
-        need: MAX_LENGTH + IDM.minGap,
+        need: (trip.kind ? VEHICLE_TYPES[trip.kind].length : MAX_LENGTH) + IDM.minGap,
         available: this.exitAvailable(first, 0),
         wait: Math.min(3, w.time - trip.createdAt),
         instant: true,
@@ -402,6 +410,7 @@ export class VehicleSystem {
       inOffset,
       mv.next.firstDir,
       outOffset,
+      this.w.grid.roundabout[edge.to] === 1 ? ROUNDABOUT.bulge : 0,
     );
     return {
       node: edge.to,
@@ -432,7 +441,7 @@ export class VehicleSystem {
     const route = this.routeFrom({ node: b.door }, dest.door);
     if (!route || route.edges.length === 0) return;
     b.pending.shift();
-    const kind = KIND_KEYS[w.rng.weightedIndex(KIND_WEIGHTS)] as VehicleKind;
+    const kind: VehicleKind = trip.kind ?? KIND_KEYS[w.rng.weightedIndex(KIND_WEIGHTS)] ?? 'car';
     const freeFlow = routeCost(w.graph, freeFlowCosts, null, route.edges);
     const v = createVehicle(w.nextVehicleId(), kind, trip, [...route.edges], w.time, freeFlow, w.rng.next());
     const first = w.graph.edge(v.edge) as GraphEdge;
@@ -441,7 +450,7 @@ export class VehicleSystem {
     if (this.exitAvailable(first, 0) - v.s > 25) v.v = Math.min(SPAWN_SPEED, first.speedLimit);
     w.vehicles.push(v);
     w.lanes.insert(laneKey(first.index, 0), v);
-    if (!isHighwayTrip(b, dest)) dest.incoming++;
+    if (!isHighwayTrip(b, dest)) dest.incoming += v.passengers;
     w.onSpawn(v);
   }
 
@@ -508,7 +517,9 @@ export class VehicleSystem {
       if (v.junction) {
         const pass = v.junction;
         const next = w.graph.edge(pass.toEdge);
-        const v0 = next && pass.turn === 'straight' ? next.speedLimit * v.speedFactor * 0.9 : ROAD.turnSpeed;
+        let v0 = next && pass.turn === 'straight' ? next.speedLimit * v.speedFactor * 0.9 : ROAD.turnSpeed;
+        // Round the island slowly.
+        if (w.grid.roundabout[pass.node] === 1) v0 = Math.min(v0, ROUNDABOUT.entrySpeed);
         const ahead = this.junctionGap(v, pass, pass.pos);
         v.acc = idmAcceleration(v.v, v0, ahead.gap, v.v - ahead.speed);
         v.state = 'inJunction';
@@ -519,12 +530,14 @@ export class VehicleSystem {
         v.acc = -IDM.maxDecel;
         continue;
       }
-      const v0 = edge.speedLimit * v.speedFactor;
+      const v0 = edge.speedLimit * v.speedFactor * w.speedScale;
       const mv = this.nextMove(v, edge);
       const dist = edge.length - v.s;
       let desired = v0;
       if (mv) {
-        const vt = mv.turn === 'straight' ? Math.min(v0, mv.next.speedLimit * v.speedFactor) : ROAD.turnSpeed;
+        let vt = mv.turn === 'straight' ? Math.min(v0, mv.next.speedLimit * v.speedFactor) : ROAD.turnSpeed;
+        // Approaching a roundabout: arrive at entry speed.
+        if (w.grid.roundabout[edge.to] === 1) vt = Math.min(vt, ROUNDABOUT.entrySpeed * 0.9);
         desired = Math.min(v0, Math.sqrt(vt * vt + 2 * IDM.comfortDecel * Math.max(0, dist)));
       }
       let acc = Infinity;
@@ -715,8 +728,8 @@ export class VehicleSystem {
       // Only gateways keep count of highway cars (cars that left the city there).
       if (dest.kind === 'kapi') dest.completed++;
     } else if (dest) {
-      dest.incoming = Math.max(0, dest.incoming - 1);
-      dest.completed++;
+      dest.incoming = Math.max(0, dest.incoming - v.passengers);
+      dest.completed += v.passengers;
     }
     this.w.onArrive(v);
   }
@@ -728,7 +741,7 @@ export class VehicleSystem {
     const dest =
       this.buildingIndex.get(v.destination) ?? this.w.buildings.find((b) => b.id === v.destination);
     const origin = this.buildingIndex.get(v.origin) ?? this.w.buildings.find((b) => b.id === v.origin);
-    if (dest && !isHighwayTrip(origin, dest)) dest.incoming = Math.max(0, dest.incoming - 1);
+    if (dest && !isHighwayTrip(origin, dest)) dest.incoming = Math.max(0, dest.incoming - v.passengers);
     this.w.onVehicleFail(v, reason);
   }
 

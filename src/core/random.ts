@@ -38,11 +38,15 @@ export class Random {
     for (const w of weights) total += Math.max(0, w);
     if (total <= 0) return -1;
     let r = this.next() * total;
+    let lastPositive = -1;
     for (let i = 0; i < weights.length; i++) {
-      r -= Math.max(0, weights[i] as number);
-      if (r < 0) return i;
+      const w = Math.max(0, weights[i] as number);
+      if (w > 0) lastPositive = i;
+      r -= w;
+      if (r < 0 && w > 0) return i;
     }
-    return weights.length - 1;
+    // Rounding can leave a tiny remainder: never return an entry with zero weight.
+    return lastPositive;
   }
 
   getState(): number {

@@ -44,4 +44,13 @@ export default tseslint.config(
     files: ['eslint.config.js'],
     ...tseslint.configs.disableTypeChecked,
   },
+  {
+    // The service worker is plain JavaScript served as-is (not part of the TypeScript build).
+    files: ['public/sw.js'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      parserOptions: { projectService: false, project: null },
+      globals: { ...globals.serviceworker },
+    },
+  },
 );

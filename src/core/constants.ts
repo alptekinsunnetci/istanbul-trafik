@@ -101,6 +101,14 @@ export const SIGNAL = {
   maxLeft: 7,
 } as const;
 
+/** Roundabouts: no stopping and no phases; cars slow down to enter and go round the island. */
+export const ROUNDABOUT = {
+  /** Cars may only ask to enter below this speed. */
+  entrySpeed: 8,
+  /** How far the paths through the box swing out around the island (m). */
+  bulge: 2.6,
+} as const;
+
 export const ROUTING = {
   /** Extra seconds per queued vehicle and lane. */
   queueWeight: 1.8,
@@ -128,6 +136,8 @@ export const VEHICLE_TYPES = {
   car: { length: 4.5, speedFactor: 1, weight: 0.68 },
   taxi: { length: 4.6, speedFactor: 1.05, weight: 0.22 },
   dolmus: { length: 6.2, speedFactor: 0.9, weight: 0.1 },
+  /** Only for passengers leaving a ferry pier or metro station together (never picked at random). */
+  otobus: { length: 11, speedFactor: 0.85, weight: 0 },
 } as const;
 
 export type VehicleKind = keyof typeof VEHICLE_TYPES;
@@ -203,6 +213,56 @@ export const AMBIENCE = {
   hornCalm: 15,
   metrobusInterval: 30,
   metrobusSpeed: 16,
+} as const;
+
+/** Time of day: rush hours bring more trips, nights fewer. */
+export const DAYTIME = {
+  dayStartHour: 6,
+  rushMorning: 8.5,
+  rushEvening: 17.5,
+  rushWidth: 1.4,
+  /** Extra demand at the height of a rush hour. */
+  rushBoost: 0.55,
+  /** Less demand deep in the night. */
+  nightDip: 0.45,
+} as const;
+
+/**
+ * City events, one at a time from week 3: a match day around a workplace,
+ * rain that slows every car down, or road works that close a street.
+ */
+export const EVENTS = {
+  firstWeek: 3,
+  gapMin: 70,
+  gapMax: 120,
+  durationMin: 30,
+  durationMax: 45,
+  /** Pins at the match workplace come this many times faster. */
+  matchBoost: 3,
+  /** Speed of all traffic in the rain. */
+  rainSpeed: 0.8,
+} as const;
+
+/** Ferry and metro lines (vapur / metro hattı). */
+export const TRANSIT = {
+  /** Houses this many cells from a station can walk to it. */
+  walkRadius: 7,
+  /** Walking time per cell, seconds. */
+  walkPerCell: 1.5,
+  ferryTime: 18,
+  metroTime: 10,
+  /** Timetable: a ferry arrives every 15 s, a metro every 8 s, and lets everyone off together. */
+  ferryEvery: 15,
+  metroEvery: 8,
+  /** Passengers for the same workplace who share a bus instead of taxis. */
+  busMin: 3,
+  busCapacity: 8,
+  /** When a pin could go by road or by line, this share takes the line. */
+  share: 0.45,
+  /** Stations of one line are at least this many cells apart. */
+  minLength: 6,
+  /** A line is a ferry line when at least this share of it runs over water. */
+  ferryWater: 0.4,
 } as const;
 
 export const TIPS = {
@@ -288,9 +348,11 @@ export const ECONOMY = {
   startBridges: 6,
   startBoulevards: 0,
   startLights: 2,
+  startRoundabouts: 1,
+  startLines: 1,
 } as const;
 
-export type ResourceKind = 'roads' | 'bridges' | 'boulevards' | 'lights';
+export type ResourceKind = 'roads' | 'bridges' | 'boulevards' | 'lights' | 'roundabouts' | 'lines';
 
 /** Weekly reward options; two are offered at random each week. */
 export const UPGRADES: readonly { kind: ResourceKind; amount: number; label: string; text: string }[] = [
@@ -298,6 +360,8 @@ export const UPGRADES: readonly { kind: ResourceKind; amount: number; label: str
   { kind: 'bridges', amount: 5, label: '+5 köprü', text: 'Suyun ya da otoyolun üstünden geçmek için' },
   { kind: 'boulevards', amount: 10, label: '+10 bulvar', text: 'İki şeritli, hızlı yollar' },
   { kind: 'lights', amount: 2, label: '+2 trafik ışığı', text: 'Kalabalık kavşakları sırayla akıt' },
+  { kind: 'roundabouts', amount: 2, label: '+2 göbek', text: 'Durmadan dönülen göbekli kavşak' },
+  { kind: 'lines', amount: 1, label: '+1 vapur/metro hattı', text: 'Yolcuları arabasız taşı' },
 ];
 
 /** A trip is "on time" if travel time ≤ freeFlow × factor + slack (statistics only). */ export const TRIP = {

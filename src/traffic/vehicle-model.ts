@@ -74,12 +74,14 @@ export interface Vehicle {
   rerouteTimer: number;
   /** Deterministic per-vehicle variation used for colours. */
   paint: number;
+  /** People on board (a bus from a station carries several). */
+  passengers: number;
 }
 
 export function createVehicle(
   id: number,
   kind: VehicleKind,
-  trip: { id: number; origin: number; destination: number },
+  trip: { id: number; origin: number; destination: number; passengers?: number },
   route: string[],
   time: number,
   freeFlowTime: number,
@@ -114,6 +116,7 @@ export function createVehicle(
     // Stagger periodic route checks so they do not all happen in one tick.
     rerouteTimer: (id % 20) / 5,
     paint,
+    passengers: trip.passengers ?? 1,
   };
 }
 
@@ -130,4 +133,5 @@ export const VEHICLE_KIND_LABELS: Record<VehicleKind, string> = {
   car: 'Otomobil',
   taxi: 'Taksi',
   dolmus: 'Dolmuş',
+  otobus: 'Otobüs',
 };

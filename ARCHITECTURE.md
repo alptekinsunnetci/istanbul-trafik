@@ -158,17 +158,62 @@ her 2 sn'de bir, kendi renginde iş yerine ulaşamayan evleri ve hiçbir evin ul
 yakın uygun binaya bağlar (önce kuru yoldan, yoksa köprüyle), kalabalık bir kavşağa ışık koyar ve
 ödülleri ihtiyaca göre seçer. Her ilçe, her modda aynı tohumla (11) en çok 1500 sn oynanır.
 
-Son ölçüm (bot, insan oyuncudan zayıftır; süreler oyunun bittiği saniyedir):
+Son ölçüm: her ilçe ve mod için 3 tohum (11, 23, 37); oyunun bittiği saniyenin ortancası. Bot insan
+oyuncudan zayıftır ve yeni araçları (göbek, hat) kullanmaz, olaylar ve günün saati ise açıktır.
 
-| Mod    | En kısa        | En uzun        | Not                                         |
-| ------ | -------------- | -------------- | ------------------------------------------- |
-| Rahat  | 1500 (hepsi)   | 1500           | Oyun bitmez; skor 570–1940                  |
-| Normal | 426 (Beşiktaş) | 897 (Beykoz)   | 12 ilçenin 9'u 530 sn'nin üstünde           |
-| Zor    | 213 (Beykoz)   | 709 (Bakırköy) | Tek tohumla ölçüldüğü için dağılım geniştir |
+| Mod    | En kısa ortanca | En uzun ortanca | Not                                           |
+| ------ | --------------- | --------------- | --------------------------------------------- |
+| Rahat  | 1500 (hepsi)    | 1500            | Oyun bitmez; skor ortancası 1118–1844         |
+| Normal | 409 (Şişli)     | 745 (Bakırköy)  | 12 ilçenin 10'unda ortanca 520 sn'nin üstünde |
+| Zor    | 264 (Şişli)     | 574 (Maltepe)   | En kısa tek oyun 215 sn (Beykoz)              |
 
 Bu ölçümlere göre yapılan ayarlar: Normal modda taşma süresi 60 → 75 sn; başlangıç köprüsü 4 → 6
 (köprüler üst geçitte de kullanılır); ilk mahalle ve her yeni rengin ilk evi iş yeriyle aynı kıyıda
-kurulur; karşı kıyıda bina 2. haftadan önce çıkmaz; Bakırköy'de Ayamama Deresi biraz doğuya alındı.
+kurulur; karşı kıyıda bina 2. haftadan önce çıkmaz; Bakırköy'de Ayamama Deresi biraz doğuya alındı;
+en zor çıkan Şişli'nin talebi 1,2 → 1,1, "kolay" olduğu halde Zor'da erken biten Beykoz'unki 0,85 → 0,8.
+Bu son iki ayardan sonra ölçüm tekrarlanmadı.
+
+## Toplu taşıma, göbek, günün saati ve olaylar
+
+- **Vapur ve metro** (`src/traffic/transit.ts`, `TRANSIT`): Bir hat iki `durak` binasıdır (`transit` alanı:
+  tür, karşı durak, yoldaki yolcular). Hat aracıyla sürüklenen çizginin en az %40'ı su ise vapur, değilse
+  metrodur; iskele kıyıda olmalıdır. Bir iş yerine raptiye geldiğinde, karşı durağı o iş yerine yoldan
+  ulaşabilen ve bir ucuna 7 hücre yürüme mesafesinde aynı renkte ev olan bir hat varsa: yoldan ulaşan ev
+  yoksa her zaman, varsa %45 olasılıkla yolculuk hatla yapılır. Yolcu yürür ve hat tarifeyle (vapur
+  15 sn, metro 8 sn) çalıştığı için bir sonraki seferle karşı durağa iner. Orada aynı iş yerine giden
+  3+ yolcu bir otobüs yolculuğu (en çok 8 kişi, `passengers`), diğerleri birer taksi yolculuğu olur.
+  Araç, `passengers` kadar `incoming` ve puan sayar. Yoldaki yolcular `pinsAt` içinde raptiye olarak
+  sayılır; taşma kuralı bunları da görür.
+- **Göbek** (`grid.roundabout`, `ROUNDABOUT`): Göbekli kavşakta yol verme ve ışık yoktur. Araçlar kavşağa
+  8 m/sn'nin altında girer, kavşak içinde de bu hızı aşmaz; geçiş eğrileri adanın çevresinden dolaşacak
+  şekilde sağa doğru şişirilir. Çakışma bölgeleri yine çarpışmayı önler. Ölçümle, yoğun bir kavşakta yol
+  vermeli kavşaktan hızlı olduğu test edilir.
+- **Günün saati** (`src/gameplay/daytime.ts`): Bir gün 90/7 sn sürer ve 06:00'da başlar. Sabah (08:30) ve
+  akşam (17:30) zirvelerinde raptiye ve otoyol trafiği hızı %55'e kadar artar, gece %45 azalır
+  (`DemandGenerator.timeFactor`). Gece haritanın üstüne lacivert yarı saydam bir katman çizilir.
+- **Olaylar** (`EVENTS`): 3. haftadan sonra 70–120 sn arayla, tek seferde bir olay 30–45 sn sürer. Maç
+  günü bir iş yerinin raptiye hızını 3 katına çıkarır (`DemandGenerator.boosts`). Yağmur tüm hız
+  sınırlarını 0,8 ile çarpar (`Simulation.speedScale`). Yol çalışması bir yol hücresini kapatır
+  (`grid.closed`); o hücreden geçen kenarlar `open = false` olur, rota motoru onları kullanmaz. Her olay
+  bitince her şey eski haline döner; olaylar kayda yazılmaz.
+- **Çapraz yol maliyeti:** Bir çizimin merdiven kısmında her ikinci hücre ücretsizdir (`grid.paid = 0`).
+  Silince yalnızca ödenen parçalar geri gelir.
+
+## Başarımlar, günün haritası, müzik ve çevrimdışı oyun
+
+- **Başarımlar** (`src/gameplay/achievements.ts`): 17 başarım; oyun sırasında saniyede bir denetlenir.
+  Açılanlar ve sayaçlar (yakalanan martı, taşınan yolcu, bitirilen günün haritası) skor kayıtlarında
+  saklanır (`Records.achievements`, `counters`). Eski kayıtlar bu alanlar olmadan da yüklenir.
+- **Günün haritası** (`src/gameplay/daily.ts`): Yerel tarihten ilçe (12 ilçe sırayla) ve tohum
+  (`hashString('daily:YYYY-AA-GG')`) üretilir, Normal modda oynanır. En iyi sonuç tarih başına saklanır;
+  oyun sonunda "Paylaş" sistem paylaşımını ya da panoya kopyalamayı kullanır. Sunucu yoktur, bu yüzden
+  skor tablosu da yoktur.
+- **Müzik** (`src/app/sound.ts`): Hicaz dizisinde (Re, Mi♭, Fa♯, Sol, La, Si♭, Do) yavaş, rastgele
+  yürüyen bir ezgi ve Re–La dronu, hafif yankıyla Web Audio'da üretilir. Yalnızca oyun oynanırken çalar;
+  ayarlardaki "Müzik" kaydırıcısıyla kısılır ya da kapanır.
+- **Çevrimdışı oyun** (`public/sw.js`, `public/manifest.webmanifest`): Üretim derlemesinde service worker
+  kaydedilir. Sayfa çevrimiçiyken ağdan, değilse önbellekten gelir; hash'li varlıklar önbellekten
+  sunulur. Nginx `sw.js` ve manifesti `no-cache` ile sunar. `?e2e` testlerinde kayıt yapılmaz.
 
 ## Şehir hayatı
 

@@ -116,7 +116,14 @@ export function cellPath(grid: Grid, from: number, to: number): number[] {
 
 /** Connects every building door of a session to the first building's door. */
 export function connectAll(session: GameSession): void {
-  session.resources = { roads: 100_000, bridges: 100_000, boulevards: 100_000, lights: 100 };
+  session.resources = {
+    roads: 100_000,
+    bridges: 100_000,
+    boulevards: 100_000,
+    lights: 100,
+    roundabouts: 100,
+    lines: 10,
+  };
   // Test networks may span the whole district, not only the initial playable area.
   const g = session.sim.grid;
   session.bounds = { x0: 0, y0: 0, x1: g.width - 1, y1: g.height - 1 };

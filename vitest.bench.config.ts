@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     include: ['tests/perf/**/*.test.ts'],
     environment: 'node',
-    testTimeout: 600_000,
+    // The balance bot plays 36 long games per mode.
+    testTimeout: 2_400_000,
   },
 });

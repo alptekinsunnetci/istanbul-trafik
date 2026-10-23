@@ -6,8 +6,9 @@ export interface ScoreState {
 export class ScoreKeeper {
   points = 0;
 
-  onCompleted(): void {
-    this.points++;
+  /** A trip arrived; a bus brings several people at once. */
+  onCompleted(people = 1): void {
+    this.points += people;
   }
 
   get score(): number {

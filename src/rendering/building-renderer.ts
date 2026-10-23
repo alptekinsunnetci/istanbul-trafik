@@ -104,7 +104,77 @@ export function drawBuildings(g: Graphics, all: readonly Building[], gridWidth: 
 }
 
 function isCityBuilding(b: Building): boolean {
-  return b.kind !== 'kapi';
+  return b.kind === 'konut' || b.kind === 'ticari';
+}
+
+const FERRY = 0x2f7fb8;
+const METRO = 0xc8372f;
+
+/**
+ * Ferry piers and metro stations, and the line between each pair: a dashed
+ * sea lane for a ferry, a dashed underground line for a metro.
+ */
+export function drawStations(
+  g: Graphics,
+  buildings: readonly Building[],
+  gridWidth: number,
+  theme: Theme,
+): void {
+  const byId = new Map<number, Building>();
+  for (const b of buildings) byId.set(b.id, b);
+  for (const b of buildings) {
+    const t = b.transit;
+    if (!t || b.id > t.partner) continue;
+    const other = byId.get(t.partner);
+    if (!other) continue;
+    const ax = (b.x + 0.5) * C;
+    const ay = (b.y + 0.5) * C;
+    const bx = (other.x + 0.5) * C;
+    const by = (other.y + 0.5) * C;
+    const len = Math.hypot(bx - ax, by - ay);
+    const steps = Math.max(2, Math.floor(len / 7));
+    for (let k = 0; k < steps; k += 2) {
+      const f0 = k / steps;
+      const f1 = Math.min(1, (k + 1) / steps);
+      g.moveTo(ax + (bx - ax) * f0, ay + (by - ay) * f0).lineTo(ax + (bx - ax) * f1, ay + (by - ay) * f1);
+    }
+    g.stroke({
+      width: t.mode === 'vapur' ? 1.6 : 2.2,
+      color: t.mode === 'vapur' ? 0xffffff : METRO,
+      alpha: 0.75,
+    });
+  }
+  for (const b of buildings) {
+    const t = b.transit;
+    if (!t) continue;
+    const x = b.x * C + 1.5;
+    const y = b.y * C + 1.5;
+    const s = C - 3;
+    const doorX = ((b.door % gridWidth) + 0.5) * C;
+    const doorY = (Math.floor(b.door / gridWidth) + 0.5) * C;
+    g.moveTo(doorX, doorY)
+      .lineTo((b.x + 0.5) * C, (b.y + 0.5) * C)
+      .stroke({ width: DRIVEWAY, color: theme.road });
+    g.roundRect(x + 2, y + 2, s, s, 3).fill({ color: theme.shadow, alpha: 0.15 });
+    g.roundRect(x, y, s, s, 3)
+      .fill(t.mode === 'vapur' ? FERRY : METRO)
+      .stroke({ width: 1, color: 0xffffff });
+    const cx = x + s / 2;
+    const cy = y + s / 2;
+    if (t.mode === 'vapur') {
+      // A little ferry: hull and funnel.
+      g.poly([cx - 4.5, cy + 0.5, cx + 4.5, cy + 0.5, cx + 3, cy + 3, cx - 3, cy + 3]).fill(0xffffff);
+      g.rect(cx - 1, cy - 3.5, 2.2, 3.4).fill(0xffffff);
+    } else {
+      // An "M".
+      g.moveTo(cx - 3.6, cy + 3.4)
+        .lineTo(cx - 3.6, cy - 3.4)
+        .lineTo(cx, cy + 0.6)
+        .lineTo(cx + 3.6, cy - 3.4)
+        .lineTo(cx + 3.6, cy + 3.4)
+        .stroke({ width: 1.6, color: 0xffffff, join: 'round', cap: 'round' });
+    }
+  }
 }
 
 /** Visible block of a building inside its footprint. */
@@ -126,6 +196,18 @@ export function drawBuildingStatus(
 ): void {
   g.clear();
   for (const b of buildings) {
+    if (b.transit) {
+      // Passengers waiting at a station for their bus or taxi.
+      const waiting =
+        b.transit.riders.filter((r) => r.readyAt <= time).length +
+        b.pending.reduce((n, t) => n + (t.passengers ?? 1), 0);
+      const shown = Math.min(waiting, 10);
+      for (let k = 0; k < shown; k++)
+        g.circle(b.x * C + C / 2 - ((shown - 1) * 4) / 2 + k * 4, b.y * C - 2.5, 1.6)
+          .fill(theme.pin)
+          .stroke({ width: 0.8, color: theme.pinRing });
+      continue;
+    }
     if (!isCityBuilding(b)) continue;
     const x = b.x * C;
     const y = b.y * C;

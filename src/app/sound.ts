@@ -60,8 +60,87 @@ const SOUNDS: Record<SoundName, Tone[]> = {
   ],
 };
 
+/**
+ * Calm generative background music: a soft drone and a slow melody on the
+ * Hicaz makam (D, E♭, F♯, G, A, B♭, C), with a gentle echo. It never repeats
+ * exactly and has no audio files.
+ */
+const HICAZ = [293.66, 311.13, 369.99, 392.0, 440.0, 466.16, 523.25, 587.33];
+
+class Music {
+  private timer: number | null = null;
+  private out: GainNode | null = null;
+  private step = 0;
+  private note = 4;
+
+  constructor(private readonly ctx: AudioContext) {}
+
+  start(volume: number): void {
+    this.setVolume(volume);
+    if (this.timer !== null) return;
+    const ctx = this.ctx;
+    if (!this.out) {
+      this.out = ctx.createGain();
+      const echo = ctx.createDelay(1);
+      echo.delayTime.value = 0.42;
+      const feedback = ctx.createGain();
+      feedback.gain.value = 0.32;
+      this.out.connect(ctx.destination);
+      this.out.connect(echo);
+      echo.connect(feedback).connect(echo);
+      echo.connect(ctx.destination);
+    }
+    this.setVolume(volume);
+    this.timer = window.setInterval(() => this.tick(), 650);
+  }
+
+  stop(): void {
+    if (this.timer !== null) window.clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  setVolume(volume: number): void {
+    if (this.out) this.out.gain.setTargetAtTime(volume * 0.5, this.ctx.currentTime, 0.3);
+  }
+
+  private tone(freq: number, dur: number, gain: number, type: OscillatorType): void {
+    const ctx = this.ctx;
+    const out = this.out;
+    if (!out) return;
+    const t = ctx.currentTime + 0.02;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + Math.min(0.4, dur / 3));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(g).connect(out);
+    osc.start(t);
+    osc.stop(t + dur + 0.05);
+  }
+
+  private tick(): void {
+    // Drone on D every eight beats, a melody note on most beats, rests in between.
+    if (this.step % 8 === 0) {
+      this.tone(HICAZ[0]! / 2, 5.5, 0.05, 'sine');
+      this.tone(HICAZ[4]! / 2, 5.5, 0.03, 'sine');
+    }
+    if (Math.random() < 0.7) {
+      const move = [-2, -1, -1, 1, 1, 2][Math.floor(Math.random() * 6)]!;
+      this.note = Math.min(HICAZ.length - 1, Math.max(0, this.note + move));
+      this.tone(HICAZ[this.note]!, 1.4, 0.045, 'triangle');
+    }
+    this.step++;
+  }
+}
+
 export class SoundPlayer {
   private ctx: AudioContext | null = null;
+  private music: Music | null = null;
+  /** Background music volume (0 = off). */
+  musicVolume = 0.4;
+  private musicWanted = false;
   private lastPlayed = new Map<SoundName, number>();
   volume = 0.6;
   muted = false;
@@ -80,6 +159,26 @@ export class SoundPlayer {
       }
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+    this.updateMusic();
+  }
+
+  /** Music plays only while the game runs; call when that changes. */
+  setMusic(playing: boolean): void {
+    this.musicWanted = playing;
+    this.updateMusic();
+  }
+
+  /** Applies volume and mute changes to the music. */
+  updateMusic(): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const on = this.musicWanted && !this.muted && this.musicVolume > 0 && this.volume > 0;
+    if (!on) {
+      this.music?.stop();
+      return;
+    }
+    this.music ??= new Music(ctx);
+    this.music.start(this.musicVolume * this.volume);
   }
 
   play(name: SoundName): void {
@@ -106,6 +205,8 @@ export class SoundPlayer {
   }
 
   dispose(): void {
+    this.music?.stop();
+    this.music = null;
     void this.ctx?.close();
     this.ctx = null;
   }

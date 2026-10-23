@@ -177,7 +177,8 @@ function addEdge(grid: Grid, graph: RoadGraph, cells: number[], dirs: Dir[]): vo
     freeFlowTime: centerLength / speedLimit,
     twin: null,
     bridge: cells.some((c) => grid.isBridge(c)),
-    open: true,
+    // Road works close a street: no new routes use it.
+    open: !cells.some((c) => grid.closed[c] === 1),
     signature: '',
   };
   graph.edges.set(id, edge);

@@ -30,4 +30,19 @@ async function boot(): Promise<void> {
   }
 }
 
+/**
+ * Offline play: register the service worker in production builds served over
+ * HTTPS (or localhost). Test runs (`?e2e`) skip it so every run starts clean.
+ */
+function registerServiceWorker(): void {
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  if (new URLSearchParams(location.search).has('e2e')) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch((err: unknown) => {
+      console.warn('Çevrimdışı oyun etkinleştirilemedi', err);
+    });
+  });
+}
+
+registerServiceWorker();
 void boot();

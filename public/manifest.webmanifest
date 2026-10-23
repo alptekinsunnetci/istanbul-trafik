@@ -1,0 +1,13 @@
+{
+  "name": "İstanbul Trafik",
+  "short_name": "İst. Trafik",
+  "description": "İstanbul ilçelerinde yol kurup trafiği yönettiğin şehir planlama oyunu.",
+  "lang": "tr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3e9dc",
+  "theme_color": "#1f2a33",
+  "icons": [{ "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -7,6 +7,8 @@ import {
   type ModeRules,
   PLAYFIELD,
   AMBIENCE,
+  EVENTS,
+  TRANSIT,
   DT,
   GEOM,
   type ResourceKind,
@@ -16,7 +18,8 @@ import {
 import { EventBus } from '../core/event-bus';
 import { Random, hashString } from '../core/random';
 import { Simulation } from '../core/simulation';
-import type { Building, BuildingKind } from '../core/world-state';
+import { demandFactor, hourAt } from './daytime';
+import { type Building, type BuildingKind, type TransitMode, buildingCells } from '../core/world-state';
 import { type District, districtById } from '../map/districts';
 import { DIRS, type Dir, type Grid, Terrain } from '../map/grid';
 import {
@@ -30,6 +33,7 @@ import {
   landRegions,
   makeBuilding,
   placeBuilding,
+  type Site,
 } from '../map/map-generator';
 import {
   type EditResult,
@@ -41,6 +45,7 @@ import {
   previewBuild,
   previewErase,
   setBoulevard,
+  toggleRoundabout,
   toggleSignal,
   smoothStroke,
   toggleOneWay,
@@ -52,7 +57,7 @@ import { ScoreKeeper } from './scoring';
 
 export type SessionPhase = 'ready' | 'running' | 'over';
 
-export type EditTool = 'road' | 'boulevard' | 'oneway' | 'erase' | 'signal';
+export type EditTool = 'road' | 'boulevard' | 'oneway' | 'erase' | 'signal' | 'roundabout' | 'transit';
 
 export type Orientation = 'wide' | 'tall';
 
@@ -72,12 +77,26 @@ export interface SessionEvents {
   buildingAdded: number;
   networkChanged: undefined;
   boundsChanged: Bounds;
+  /** A city event started (match, rain, road works) or ended (null). */
+  cityEvent: CityEvent | null;
   /** A gull appeared, or a flying gull calls. */
   gullCall: undefined;
   /** The player caught a gull (world position) and got road pieces. */
   gullCaught: { x: number; y: number; roads: number };
   /** Drivers stuck in a heavy jam honk. */
   horn: undefined;
+  /** People who came by ferry or metro reached their workplace. */
+  transitDelivered: number;
+}
+
+export type CityEventKind = 'mac' | 'yagmur' | 'yol';
+
+export interface CityEvent {
+  kind: CityEventKind;
+  until: number;
+  /** Match day: the workplace with the crowd. Road works: the closed cell. */
+  target: number;
+  text: string;
 }
 
 /** A gull flying over open water, in world metres. */
@@ -107,6 +126,8 @@ interface RoadSnapshot {
   locked: Uint8Array;
   signal: Uint8Array;
   overpass: Uint8Array;
+  paid: Uint8Array;
+  roundabout: Uint8Array;
   /** Entrance cell and side of every building at snapshot time. */
   doors: Map<number, [number, Dir]>;
   resources: Resources;
@@ -166,6 +187,9 @@ export class GameSession {
   private readonly ambienceRng: Random;
   /** Open-water cells (water all around), where gulls fly. */
   private readonly openWater: number[] = [];
+  /** The city event going on, if any. */
+  event: CityEvent | null = null;
+  private nextEventAt = (EVENTS.firstWeek - 1) * ECONOMY.weekLength + 20;
   private hornBursts = 0;
   private nextHornAt = 0;
   private calmSince = 0;
@@ -215,9 +239,218 @@ export class GameSession {
       bridges: this.usesBridges ? ECONOMY.startBridges : 0,
       boulevards: ECONOMY.startBoulevards,
       lights: ECONOMY.startLights,
+      roundabouts: ECONOMY.startRoundabouts,
+      lines: ECONOMY.startLines,
     };
-    this.unsubscribers.push(this.sim.events.on('tripCompleted', () => this.score.onCompleted()));
+    this.unsubscribers.push(
+      this.sim.events.on('tripCompleted', (e) => {
+        this.score.onCompleted(e.vehicle.passengers);
+        if (this.sim.buildingById(e.vehicle.origin)?.kind === 'durak')
+          this.events.emit('transitDelivered', e.vehicle.passengers);
+      }),
+    );
     this.unsubscribers.push(this.sim.events.on('gridlock', () => this.lightTip(true)));
+  }
+
+  // ----------------------------------------------------------------- transit
+
+  /** A line across mostly water (between two shores) is a ferry line, otherwise a metro line. */
+  private lineMode(a: number, b: number): TransitMode {
+    const g = this.sim.grid;
+    const ax = g.cx(a);
+    const ay = g.cy(a);
+    const bx = g.cx(b);
+    const by = g.cy(b);
+    let water = 0;
+    const n = 24;
+    for (let k = 1; k < n; k++) {
+      const x = Math.round(ax + ((bx - ax) * k) / n);
+      const y = Math.round(ay + ((by - ay) * k) / n);
+      if (g.inBounds(x, y) && g.terrain[g.idx(x, y)] === Terrain.Water) water++;
+    }
+    return water / (n - 1) >= TRANSIT.ferryWater ? 'vapur' : 'metro';
+  }
+
+  /** A free spot for a station near a cell; a pier has to stand on the shore. */
+  private stationSite(cell: number, mode: TransitMode): Site | null {
+    const g = this.sim.grid;
+    const shore = (x: number, y: number): boolean => {
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++)
+          if (g.inBounds(x + dx, y + dy) && g.terrain[g.idx(x + dx, y + dy)] === Terrain.Water) return true;
+      return false;
+    };
+    return findSite(g, this.sim.buildings, 'durak', this.ambienceRng, {
+      center: [g.cx(cell), g.cy(cell)],
+      minRadius: 0,
+      maxRadius: mode === 'vapur' ? 3 : 2.5,
+      minDistance: 1,
+      attempts: 120,
+      bounds: this.bounds,
+      ...(mode === 'vapur' ? { accept: shore } : {}),
+    });
+  }
+
+  /**
+   * The transit tool: dragging from one place to another builds a line with a
+   * station at each end; tapping a station removes its line again.
+   */
+  private transitEdit(raw: readonly number[]): EditResult {
+    const none = noResources();
+    const g = this.sim.grid;
+    const cells = raw.filter((c) => c >= 0);
+    const first = cells[0];
+    const last = cells[cells.length - 1];
+    if (first === undefined || last === undefined)
+      return { ok: false, spent: none, changed: 0, message: 'Hat için iki yer arasında sürükleyin' };
+    const tapped = this.sim.buildingById(g.building[first] as number);
+    const short = Math.hypot(g.cx(first) - g.cx(last), g.cy(first) - g.cy(last)) < TRANSIT.minLength;
+    if (tapped?.kind === 'durak' && short) return this.removeLine(tapped);
+    if (short)
+      return {
+        ok: false,
+        spent: none,
+        changed: 0,
+        message: `Hat en az ${TRANSIT.minLength} hücre uzun olmalı`,
+      };
+    if (this.resources.lines < 1)
+      return { ok: false, spent: none, changed: 0, message: 'Vapur/metro hattı kalmadı' };
+    const mode = this.lineMode(first, last);
+    const a = this.stationSite(first, mode);
+    const b = a ? this.stationSite(last, mode) : null;
+    if (!a || !b || Math.hypot(a.x - b.x, a.y - b.y) < TRANSIT.minLength)
+      return {
+        ok: false,
+        spent: none,
+        changed: 0,
+        message:
+          mode === 'vapur' ? 'İskele için iki kıyıda da boş yer gerekir' : 'İstasyon için boş yer bulunamadı',
+      };
+    const used = new Set(this.sim.buildings.map((x) => x.name));
+    const nextId = this.sim.buildings.reduce((m, x) => Math.max(m, x.id), -1) + 1;
+    const suffix = mode === 'vapur' ? 'İskelesi' : 'Metro';
+    const make = (id: number, partner: number, site: Site): Building => {
+      let name = `${this.ambienceRng.pick(this.district.neighbourhoods)} ${suffix}`;
+      if (used.has(name)) name = `${name} ${id}`;
+      used.add(name);
+      const st = makeBuilding(id, 'durak', 0, site, name, this.sim.time);
+      st.transit = { mode, partner, riders: [] };
+      placeBuilding(g, st);
+      this.sim.buildings.push(st);
+      return st;
+    };
+    // A station whose site is already taken by the first one cannot be placed twice.
+    const sa = make(nextId, nextId + 1, a);
+    if (g.building[b.door] !== -1 || g.building[g.idx(b.x, b.y)] !== -1) {
+      this.dropStation(sa);
+      return { ok: false, spent: none, changed: 0, message: 'İstasyon için boş yer bulunamadı' };
+    }
+    const sb = make(nextId + 1, nextId, b);
+    this.resources.lines--;
+    // Buildings appeared: old undo steps no longer fit.
+    this.undoStack = [];
+    this.settle();
+    this.events.emit('buildingAdded', sa.id);
+    this.events.emit('buildingAdded', sb.id);
+    return {
+      ok: true,
+      spent: { ...none, lines: 1 },
+      changed: 1,
+      message: `${mode === 'vapur' ? 'Vapur' : 'Metro'} hattı açıldı`,
+    };
+  }
+
+  /** Removes a line: passengers on it go back home and wait for a car instead. */
+  private removeLine(station: Building): EditResult {
+    const partner = this.sim.buildingById(station.transit?.partner ?? -1);
+    for (const st of [station, partner]) {
+      if (!st) continue;
+      for (const r of st.transit?.riders ?? []) {
+        const home = this.sim.buildingById(r.trip.origin);
+        if (home?.kind === 'konut') home.pending.push({ ...r.trip, createdAt: this.sim.time });
+      }
+      this.dropStation(st);
+    }
+    this.resources.lines++;
+    this.undoStack = [];
+    this.settle();
+    return { ok: true, spent: { ...noResources(), lines: -1 }, changed: 1, message: 'Hat kaldırıldı' };
+  }
+
+  private dropStation(st: Building): void {
+    const g = this.sim.grid;
+    for (const c of buildingCells(st, g.width)) g.building[c] = -1;
+    g.locked[st.door] = 0;
+    if (g.degree(st.door) === 0) {
+      g.road[st.door] = 0;
+      g.links[st.door] = 0;
+      g.lanes[st.door] = 0;
+    }
+    g.touch();
+    this.sim.buildings = this.sim.buildings.filter((b) => b !== st);
+  }
+
+  /** City events: one at a time, from week 3 on, each for half a minute or so. */
+  private updateEvent(): void {
+    const time = this.sim.time;
+    const ev = this.event;
+    if (ev) {
+      if (time >= ev.until) this.endEvent();
+      return;
+    }
+    if (time < this.nextEventAt) return;
+    const rng = this.ambienceRng;
+    this.nextEventAt = time + rng.range(EVENTS.gapMin, EVENTS.gapMax);
+    const until = time + rng.range(EVENTS.durationMin, EVENTS.durationMax);
+    const kinds: CityEventKind[] = ['mac', 'yagmur', 'yol'];
+    const kind = rng.pick(kinds);
+    const grid = this.sim.grid;
+    if (kind === 'mac') {
+      const works = this.sim.buildings.filter((b) => b.kind === 'ticari');
+      if (works.length === 0) return;
+      const w = rng.pick(works);
+      this.sim.demand.boosts.set(w.id, EVENTS.matchBoost);
+      this.startEvent({ kind, until, target: w.id, text: `Maç günü! ${w.name} çevresinde trafik artıyor.` });
+    } else if (kind === 'yagmur') {
+      this.sim.speedScale = EVENTS.rainSpeed;
+      this.startEvent({ kind, until, target: -1, text: 'Yağmur başladı: araçlar yavaşladı.' });
+    } else {
+      const cells: number[] = [];
+      for (let i = 0; i < grid.size; i++) {
+        if (!grid.isRoad(i) || grid.locked[i] === 1 || grid.isBridge(i) || grid.degree(i) !== 2) continue;
+        if (grid.signal[i] === 1 || grid.roundabout[i] === 1 || grid.overpass[i] === 1) continue;
+        cells.push(i);
+      }
+      if (cells.length === 0) return;
+      const c = rng.pick(cells);
+      grid.closed[c] = 1;
+      this.settle();
+      this.startEvent({
+        kind,
+        until,
+        target: c,
+        text: 'Yol çalışması: bir yol bir süre kapalı, araçlar başka yoldan gider.',
+      });
+    }
+  }
+
+  private startEvent(ev: CityEvent): void {
+    this.event = ev;
+    this.events.emit('notice', { kind: 'info', text: ev.text });
+    this.events.emit('cityEvent', ev);
+  }
+
+  private endEvent(): void {
+    const ev = this.event;
+    if (!ev) return;
+    this.event = null;
+    if (ev.kind === 'mac') this.sim.demand.boosts.delete(ev.target);
+    else if (ev.kind === 'yagmur') this.sim.speedScale = 1;
+    else {
+      this.sim.grid.closed[ev.target] = 0;
+      this.settle();
+    }
+    this.events.emit('cityEvent', null);
   }
 
   /** Gulls: now and then one flies over open water near the playable area and calls. */
@@ -316,6 +549,8 @@ export class GameSession {
   /** One fixed simulation step. Does nothing unless the game is running and no reward is pending. */
   step(): void {
     if (!this.active) return;
+    // Rush hours and quiet nights.
+    this.sim.demand.timeFactor = demandFactor(hourAt(this.sim.time));
     this.sim.step();
     const time = this.sim.time;
 
@@ -325,6 +560,7 @@ export class GameSession {
     if (this.sim.tick % 20 === 0 && this.sim.queues.snapshot.longestQueue >= TIPS.queueForLight)
       this.lightTip(false);
     this.updateGull();
+    this.updateEvent();
     if (this.sim.tick % 20 === 0) this.updateHorns();
 
     if (time >= this.nextGrowthAt) {
@@ -482,7 +718,7 @@ export class GameSession {
           bestColor = color;
         }
       }
-      const city = sim.buildings.filter((x) => x.kind !== 'kapi');
+      const city = sim.buildings.filter((x) => x.kind === 'konut' || x.kind === 'ticari');
       const sameColor = city.filter((x) => x.color === bestColor);
       const anchor = this.growthRng.pick(sameColor.length > 0 ? sameColor : city);
       const across =
@@ -667,11 +903,28 @@ export class GameSession {
 
   preview(tool: EditTool, rawStroke: readonly number[]): StrokePreview {
     const grid = this.sim.grid;
+    if (tool === 'transit') {
+      const cells = rawStroke.filter((c) => c >= 0);
+      const a = cells[0];
+      const b = cells[cells.length - 1];
+      if (a === undefined || b === undefined) return { cells: [], spent: noResources() };
+      const long = Math.hypot(grid.cx(a) - grid.cx(b), grid.cy(a) - grid.cy(b)) >= TRANSIT.minLength;
+      const p: StrokePreview = {
+        cells: [
+          { cell: a, valid: long },
+          { cell: b, valid: long },
+        ],
+        spent: noResources(),
+      };
+      if (cells.length > 1)
+        p.message = long ? `${this.lineMode(a, b) === 'vapur' ? 'Vapur' : 'Metro'} hattı` : 'Hat çok kısa';
+      return p;
+    }
     const { cells: stroke, clipped } = this.prepareStroke(tool, rawStroke);
     let p: StrokePreview;
     if (tool === 'road') p = previewBuild(grid, stroke, this.resources);
     else if (tool === 'erase') p = previewErase(grid, stroke);
-    else if (tool === 'signal') {
+    else if (tool === 'signal' || tool === 'roundabout') {
       const c = stroke[0];
       const ok = c !== undefined && grid.isRoad(c) && (grid.signal[c] === 1 || grid.degree(c) >= 3);
       p = { cells: c === undefined ? [] : [{ cell: c, valid: ok }], spent: noResources() };
@@ -682,6 +935,7 @@ export class GameSession {
 
   edit(tool: EditTool, rawStroke: readonly number[]): EditResult {
     if (!this.editable) return { ok: false, spent: noResources(), changed: 0, message: 'Oyun bitti' };
+    if (tool === 'transit') return this.transitEdit(rawStroke);
     const grid = this.sim.grid;
     const before = this.snapshotRoads();
     const { cells: stroke, clipped, rotated } = this.prepareStroke(tool, rawStroke, true);
@@ -711,6 +965,9 @@ export class GameSession {
       case 'signal':
         result = toggleSignal(grid, stroke, this.resources);
         break;
+      case 'roundabout':
+        result = toggleRoundabout(grid, stroke, this.resources);
+        break;
     }
     if (clipped && result.ok && tool === 'road') {
       result = { ...result, ok: false, message: 'Şehrin sınırına ulaştın' };
@@ -720,6 +977,7 @@ export class GameSession {
       this.resources.bridges -= result.spent.bridges;
       this.resources.boulevards -= result.spent.boulevards;
       this.resources.lights -= result.spent.lights;
+      this.resources.roundabouts -= result.spent.roundabouts;
       this.commitEdit(before);
       if (rotated && result.changed === 0) result = { ...result, changed: 1 };
     }
@@ -747,6 +1005,8 @@ export class GameSession {
     g.locked.set(snap.locked);
     g.signal.set(snap.signal);
     g.overpass.set(snap.overpass);
+    g.paid.set(snap.paid);
+    g.roundabout.set(snap.roundabout);
     for (const b of this.sim.buildings) {
       const door = snap.doors.get(b.id);
       if (door) {
@@ -776,6 +1036,8 @@ export class GameSession {
       locked: g.locked.slice(),
       signal: g.signal.slice(),
       overpass: g.overpass.slice(),
+      paid: g.paid.slice(),
+      roundabout: g.roundabout.slice(),
       doors: new Map(this.sim.buildings.map((b) => [b.id, [b.door, b.doorDir] as [number, Dir]])),
       resources: { ...this.resources },
     };

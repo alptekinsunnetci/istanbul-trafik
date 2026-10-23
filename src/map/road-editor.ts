@@ -1,14 +1,22 @@
 import type { ResourceKind } from '../core/constants';
+import { diagonalRuns } from './geometry';
 import { type Dir, type Grid, Terrain, dirBetween, opposite } from './grid';
 
 /** Countable building pieces: one piece per cell. */
 export type Resources = Record<ResourceKind, number>;
 
 export function noResources(): Resources {
-  return { roads: 0, bridges: 0, boulevards: 0, lights: 0 };
+  return { roads: 0, bridges: 0, boulevards: 0, lights: 0, roundabouts: 0, lines: 0 };
 }
 
-export const UNLIMITED: Resources = { roads: 1e9, bridges: 1e9, boulevards: 1e9, lights: 1e9 };
+export const UNLIMITED: Resources = {
+  roads: 1e9,
+  bridges: 1e9,
+  boulevards: 1e9,
+  lights: 1e9,
+  roundabouts: 1e9,
+  lines: 1e9,
+};
 
 export interface EditResult {
   ok: boolean;
@@ -23,6 +31,8 @@ export interface PreviewCell {
   valid: boolean;
   /** The street crosses a highway here on an overpass (uses a bridge piece). */
   overpass?: boolean;
+  /** Inside a diagonal: every second cell costs nothing. */
+  free?: boolean;
 }
 
 export interface StrokePreview {
@@ -40,6 +50,8 @@ export function cellPieces(grid: Grid, i: number): Resources {
   }
   if (!grid.isRoad(i) || grid.locked[i] === 1) return r;
   if (grid.signal[i] === 1) r.lights = 1;
+  if (grid.roundabout[i] === 1) r.roundabouts = 1;
+  if (grid.paid[i] === 0) return r;
   if (grid.isBridge(i)) r.bridges = 1;
   else r.roads = 1;
   if (grid.lanes[i] === 2) r.boulevards = 1;
@@ -51,6 +63,8 @@ function addTo(a: Resources, b: Resources, sign = 1): void {
   a.bridges += sign * b.bridges;
   a.boulevards += sign * b.boulevards;
   a.lights += sign * b.lights;
+  a.roundabouts += sign * b.roundabouts;
+  a.lines += sign * b.lines;
 }
 
 /**
@@ -165,6 +179,15 @@ export function previewBuild(grid: Grid, stroke: readonly number[], budget: Reso
   const spent = noResources();
   let message: string | undefined;
   let blocked = false;
+  // A diagonal step is as cheap as a straight one: every second staircase cell is free.
+  const dirs: Dir[] = [];
+  for (let k = 1; k < stroke.length; k++) {
+    const d = stepDir(grid, stroke[k - 1] as number, stroke[k] as number);
+    if (d !== null) dirs.push(d);
+  }
+  const free = new Uint8Array(stroke.length);
+  if (dirs.length === stroke.length - 1)
+    for (const [a, b] of diagonalRuns(dirs)) for (let k = a + 1; k < b; k += 2) free[k] = 1;
   for (let k = 0; k < stroke.length; k++) {
     const c = stroke[k] as number;
     if (blocked) {
@@ -182,7 +205,9 @@ export function previewBuild(grid: Grid, stroke: readonly number[], budget: Reso
       continue;
     }
     const reason = buildBlockReason(grid, c);
-    const kind: ResourceKind | null = grid.isRoad(c) ? null : grid.isBridge(c) ? 'bridges' : 'roads';
+    const isFree = free[k] === 1 && !grid.isRoad(c);
+    const kind: ResourceKind | null =
+      grid.isRoad(c) || isFree ? null : grid.isBridge(c) ? 'bridges' : 'roads';
     if (reason) {
       message = reason;
       blocked = true;
@@ -191,7 +216,7 @@ export function previewBuild(grid: Grid, stroke: readonly number[], budget: Reso
       blocked = true;
     }
     if (!blocked && kind) spent[kind]++;
-    cells.push({ cell: c, valid: !blocked });
+    cells.push(isFree ? { cell: c, valid: !blocked, free: true } : { cell: c, valid: !blocked });
   }
   return message === undefined ? { cells, spent } : { cells, spent, message };
 }
@@ -212,6 +237,7 @@ export function buildRoad(grid: Grid, stroke: readonly number[], budget: Resourc
       grid.road[c] = 1;
       grid.lanes[c] = 1;
       grid.links[c] = 0;
+      grid.paid[c] = p.free ? 0 : 1;
       changed++;
     }
     if (prev >= 0) {
@@ -279,6 +305,9 @@ export function eraseRoad(grid: Grid, stroke: readonly number[]): EditResult {
     grid.road[c] = 0;
     grid.lanes[c] = 0;
     grid.signal[c] = 0;
+    grid.roundabout[c] = 0;
+    grid.closed[c] = 0;
+    grid.paid[c] = 0;
     changed++;
   }
   if (changed > 0) grid.touch();
@@ -377,9 +406,36 @@ export function toggleSignal(grid: Grid, stroke: readonly number[], budget: Reso
   }
   if (grid.degree(c) < 3 || grid.overpass[c] === 1)
     return { ok: false, spent, changed: 0, message: 'Trafik ışığı yalnızca kavşağa konur' };
+  if (grid.roundabout[c] === 1) return { ok: false, spent, changed: 0, message: 'Bu kavşakta göbek var' };
   if (budget.lights < 1) return { ok: false, spent, changed: 0, message: 'Trafik ışığı kalmadı' };
   grid.signal[c] = 1;
   spent.lights = 1;
+  grid.touch();
+  return { ok: true, spent, changed: 1 };
+}
+
+/**
+ * Turns a junction (three or more arms, not on a highway) into a roundabout,
+ * or back into a plain junction, returning the piece.
+ */
+export function toggleRoundabout(grid: Grid, stroke: readonly number[], budget: Resources): EditResult {
+  const spent = noResources();
+  const c = stroke[0];
+  if (c === undefined || !grid.isRoad(c))
+    return { ok: false, spent, changed: 0, message: 'Göbeği bir kavşağa koyun' };
+  if (grid.roundabout[c] === 1) {
+    grid.roundabout[c] = 0;
+    spent.roundabouts = -1;
+    grid.touch();
+    return { ok: true, spent, changed: 1, message: 'Göbek kaldırıldı' };
+  }
+  if (grid.degree(c) < 3 || grid.overpass[c] === 1)
+    return { ok: false, spent, changed: 0, message: 'Göbek yalnızca kavşağa konur' };
+  if (grid.isHighway(c)) return { ok: false, spent, changed: 0, message: 'Otoyola göbek konmaz' };
+  if (grid.signal[c] === 1) return { ok: false, spent, changed: 0, message: 'Önce trafik ışığını kaldırın' };
+  if (budget.roundabouts < 1) return { ok: false, spent, changed: 0, message: 'Göbek kalmadı' };
+  grid.roundabout[c] = 1;
+  spent.roundabouts = 1;
   grid.touch();
   return { ok: true, spent, changed: 1 };
 }

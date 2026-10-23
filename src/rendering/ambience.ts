@@ -1,5 +1,8 @@
 import { Container, Graphics } from 'pixi.js';
-import { AMBIENCE } from '../core/constants';
+import { AMBIENCE, TRANSIT } from '../core/constants';
+
+const AMBIENCE_FERRY_EVERY = TRANSIT.ferryEvery;
+const AMBIENCE_METRO_EVERY = TRANSIT.metroEvery;
 import type { GameSession } from '../gameplay/game-session';
 import { metrobusRoutes } from './map-renderer';
 import type { Theme } from './theme';
@@ -24,6 +27,12 @@ export class Ambience {
   readonly container = new Container();
   private readonly busShape = new Graphics();
   private readonly gullShape = new Graphics();
+  /** Ferries and metro trains running back and forth on their lines. */
+  private readonly vessels = new Graphics();
+  /** Darkness at night, rain streaks in the rain (screen-sized, drawn in world space). */
+  private readonly sky = new Graphics();
+  private readonly rain = new Graphics();
+  private rainPhase = 0;
   private bus: Bus | null = null;
   private nextBusAt = 8;
   private lastSimTime = -1;
@@ -34,7 +43,7 @@ export class Ambience {
   constructor() {
     this.busShape.visible = false;
     this.gullShape.visible = false;
-    this.container.addChild(this.busShape, this.gullShape);
+    this.container.addChild(this.vessels, this.busShape, this.gullShape, this.rain);
   }
 
   setSession(session: GameSession | null, theme: Theme): void {
@@ -56,6 +65,7 @@ export class Ambience {
     const dt = this.lastSimTime < 0 ? 0 : Math.max(0, time - this.lastSimTime);
     this.lastSimTime = time;
     this.updateBus(time, dt);
+    this.drawVessels(s, time);
     this.flap += reduceMotion ? 0 : frameSeconds;
     const g = s.gull;
     this.gullShape.visible = g !== null;
@@ -64,6 +74,64 @@ export class Ambience {
       this.gullShape.rotation = Math.atan2(g.vy, g.vx) + Math.PI / 2;
       // Wing beat.
       this.gullShape.scale.set(1, 0.75 + 0.25 * Math.sin(this.flap * 9));
+    }
+  }
+
+  /** The night layer goes under the vehicles; the renderer adds it to its own layer stack. */
+  get night(): Graphics {
+    return this.sky;
+  }
+
+  /** Paints darkness (0..1) and rain over the given world rectangle. */
+  weather(
+    darkness: number,
+    raining: boolean,
+    view: { x: number; y: number; w: number; h: number },
+    dt: number,
+  ): void {
+    this.sky.clear();
+    if (darkness > 0.01)
+      this.sky.rect(view.x, view.y, view.w, view.h).fill({ color: 0x14213d, alpha: 0.32 * darkness });
+    this.rain.clear();
+    if (!raining) return;
+    this.rainPhase = (this.rainPhase + dt * 1.6) % 1;
+    const step = 22;
+    for (let y = Math.floor(view.y / step) * step; y < view.y + view.h; y += step)
+      for (let x = Math.floor(view.x / step) * step; x < view.x + view.w; x += step) {
+        const jitter = ((x * 7 + y * 13) % step) / step;
+        const oy = ((this.rainPhase + jitter) % 1) * step;
+        this.rain.moveTo(x + jitter * 8, y + oy).lineTo(x + jitter * 8 - 2, y + oy + 6);
+      }
+    this.rain.stroke({ width: 0.6, color: 0x9fb7cc, alpha: 0.6 });
+  }
+
+  private drawVessels(s: GameSession, time: number): void {
+    const v = this.vessels;
+    v.clear();
+    const byId = new Map(s.sim.buildings.map((b) => [b.id, b]));
+    for (const b of s.sim.buildings) {
+      const t = b.transit;
+      if (!t || b.id > t.partner) continue;
+      const other = byId.get(t.partner);
+      if (!other) continue;
+      // Back and forth on the timetable: one crossing per service interval.
+      const every = t.mode === 'vapur' ? AMBIENCE_FERRY_EVERY : AMBIENCE_METRO_EVERY;
+      const phase = (time % (2 * every)) / every;
+      const f = phase <= 1 ? phase : 2 - phase;
+      const ease = f * f * (3 - 2 * f);
+      const ax = (b.x + 0.5) * 16;
+      const ay = (b.y + 0.5) * 16;
+      const x = ax + ((other.x + 0.5) * 16 - ax) * ease;
+      const y = ay + ((other.y + 0.5) * 16 - ay) * ease;
+      if (t.mode === 'vapur') {
+        v.ellipse(x + 1.5, y + 2, 6, 2.6).fill({ color: 0x14213d, alpha: 0.15 });
+        v.roundRect(x - 6, y - 2.4, 12, 4.8, 2.2)
+          .fill(0xffffff)
+          .stroke({ width: 0.8, color: 0x2f7fb8 });
+        v.rect(x - 1, y - 1.4, 2.4, 2.8).fill(0x2f7fb8);
+      } else {
+        v.roundRect(x - 5, y - 1.8, 10, 3.6, 1.6).fill({ color: 0xc8372f, alpha: 0.55 });
+      }
     }
   }
 

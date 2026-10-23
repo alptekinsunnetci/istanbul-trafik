@@ -1,3 +1,4 @@
+import { clockText, dayPart, hourAt } from '../gameplay/daytime';
 import type { AppState } from '../app/app-state';
 import { ECONOMY } from '../core/constants';
 import type { GameSession } from '../gameplay/game-session';
@@ -98,8 +99,11 @@ export class Hud {
     const weekPos = (t % ECONOMY.weekLength) / ECONOMY.weekLength;
     const dayIndex = Math.min(6, Math.floor(weekPos * 7));
     this.district.textContent = session.district.name;
-    this.day.textContent = DAYS[dayIndex] ?? '';
-    this.day.title = `${session.week}. hafta, ${DAY_NAMES[dayIndex] ?? ''}`;
+    const hour = hourAt(t);
+    const clock = clockText(hour);
+    const dayText = `${DAYS[dayIndex] ?? ''} ${clock}`;
+    if (this.day.textContent !== dayText) this.day.textContent = dayText;
+    this.day.title = `${session.week}. hafta, ${DAY_NAMES[dayIndex] ?? ''} ${clock} · ${dayPart(hour)}`;
     this.ringFill.setAttribute('stroke-dasharray', `${(weekPos * RING).toFixed(1)} ${RING}`);
     this.chip.hidden = state !== 'paused';
     this.score.textContent = formatNumber(session.score.score);

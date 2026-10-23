@@ -1,3 +1,4 @@
+import type { VehicleKind } from './constants';
 import type { Dir } from '../map/grid';
 
 /**
@@ -5,7 +6,7 @@ import type { Dir } from '../map/grid';
  * Gateways (`kapi`) sit at the map edge where a highway leaves the city;
  * they send and receive through traffic, and their `color` is only an index.
  */
-export type BuildingKind = 'konut' | 'ticari' | 'kapi';
+export type BuildingKind = 'konut' | 'ticari' | 'kapi' | 'durak';
 
 export interface BuildingType {
   w: number;
@@ -17,6 +18,7 @@ export const BUILDING_TYPES: Record<BuildingKind, BuildingType> = {
   konut: { w: 1, h: 1, label: 'Ev' },
   ticari: { w: 2, h: 2, label: 'İş yeri' },
   kapi: { w: 1, h: 1, label: 'Şehir dışı bağlantısı' },
+  durak: { w: 1, h: 1, label: 'Durak' },
 };
 
 /** Names of the colour groups, in the order they are introduced. */
@@ -27,6 +29,25 @@ export interface TripRequest {
   origin: number;
   destination: number;
   createdAt: number;
+  /** People in the vehicle (a bus carries several); 1 when not set. */
+  passengers?: number;
+  /** Vehicle to send (taxi or bus from a station); random when not set. */
+  kind?: VehicleKind;
+}
+
+export type TransitMode = 'vapur' | 'metro';
+
+/** A passenger on a line, arriving at the station at `readyAt`. */
+export interface TransitRider {
+  trip: TripRequest;
+  readyAt: number;
+}
+
+export interface TransitStation {
+  mode: TransitMode;
+  /** The station at the other end of the line. */
+  partner: number;
+  riders: TransitRider[];
 }
 
 export interface Building {
@@ -56,6 +77,8 @@ export interface Building {
   pinTimer: number;
   /** Workplaces: overflow timer as a fraction 0..1; the game is lost when it is full. */
   overflow: number;
+  /** Ferry pier or metro station (`durak`). */
+  transit?: TransitStation;
 }
 
 /**

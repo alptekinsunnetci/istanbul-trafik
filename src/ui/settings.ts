@@ -66,6 +66,9 @@ export function openSettings(
     Math.round(current.volume * 100),
     (v) => `%${v}`,
   );
+  const music = range('set-music', 'Müzik', 0, 100, 5, Math.round(current.music * 100), (v) =>
+    v === 0 ? 'Kapalı' : `%${v}`,
+  );
   const muted = checkbox('set-muted', 'Sesleri kapat', current.muted);
   const motionSelect = h('select', { id: 'set-motion' });
   for (const [v, label] of [
@@ -94,6 +97,7 @@ export function openSettings(
   const read = (): Settings => ({
     version: DEFAULT_SETTINGS.version,
     volume: Math.min(1, Math.max(0, Number(volume.input.value) / 100)),
+    music: Math.min(1, Math.max(0, Number(music.input.value) / 100)),
     muted: muted.input.checked,
     reduceMotion: motionSelect.value as ReduceMotion,
     highContrast: contrast.input.checked,
@@ -122,6 +126,8 @@ export function openSettings(
     () => {
       volume.input.value = String(DEFAULT_SETTINGS.volume * 100);
       volume.input.dispatchEvent(new Event('input'));
+      music.input.value = String(DEFAULT_SETTINGS.music * 100);
+      music.input.dispatchEvent(new Event('input'));
       muted.input.checked = DEFAULT_SETTINGS.muted;
       motionSelect.value = DEFAULT_SETTINGS.reduceMotion;
       contrast.input.checked = DEFAULT_SETTINGS.highContrast;
@@ -136,9 +142,10 @@ export function openSettings(
   );
   const closeBtn = button('Kapat', close, { className: 'pill', id: 'btn-close-settings' });
 
-  const soundFields = h('fieldset', {}, h('legend', { text: 'Ses' }), volume.row, muted.row);
+  const soundFields = h('fieldset', {}, h('legend', { text: 'Ses' }), volume.row, music.row, muted.row);
   if (!soundSupported) {
     volume.input.disabled = true;
+    music.input.disabled = true;
     muted.input.disabled = true;
     soundFields.append(
       h('p', { class: 'field-help', text: 'Bu tarayıcı Web Audio desteklemiyor; sesler çalınamaz.' }),

@@ -5,7 +5,7 @@ import { type Building, type TripFailureReason, isHighwayTrip } from './world-st
 import type { Grid } from '../map/grid';
 import { type GraphEdge, RoadGraph } from '../map/road-graph';
 import { buildGraph } from '../map/topology';
-import { DemandGenerator } from '../traffic/demand-generator';
+import { DemandGenerator, pinsAt } from '../traffic/demand-generator';
 import { JunctionController } from '../traffic/junction-controller';
 import { LaneManager, laneKey } from '../traffic/lane-manager';
 import { type GridlockInfo, QueueManager } from '../traffic/queue-manager';
@@ -109,6 +109,8 @@ export class Simulation {
   nextVehicleId = 1;
   nextTripId = 1;
   demandEnabled = true;
+  /** Multiplies every speed limit; below 1 in the rain. */
+  speedScale = 1;
   /** Highway cars that finished their trip (not part of the score or the trip statistics). */
   throughCompleted = 0;
   gridlocks: GridlockInfo[] = [];
@@ -143,6 +145,9 @@ export class Simulation {
     const sim = this;
     const world: TrafficWorld = {
       grid: this.grid,
+      get speedScale() {
+        return sim.speedScale;
+      },
       get graph() {
         return sim.graph;
       },
@@ -209,16 +214,9 @@ export class Simulation {
 
   /** Workplaces with too many pins fill their overflow timer; others drain it. */
   private updateOverflow(): void {
-    const pins = new Map<number, number>();
-    for (const b of this.buildings) {
-      if (b.kind === 'ticari') pins.set(b.id, b.incoming);
-    }
-    for (const b of this.buildings) {
-      for (const t of b.pending) pins.set(t.destination, (pins.get(t.destination) ?? 0) + 1);
-    }
     for (const b of this.buildings) {
       if (b.kind !== 'ticari') continue;
-      if ((pins.get(b.id) ?? 0) >= this.rules.overflowPins)
+      if (pinsAt(this.buildings, b) >= this.rules.overflowPins)
         b.overflow = Math.min(1, b.overflow + DT / this.rules.overflowTime);
       else b.overflow = Math.max(0, b.overflow - (DT * DEMAND.overflowRecovery) / this.rules.overflowTime);
     }
@@ -256,7 +254,8 @@ export class Simulation {
     const free = Math.max(v.freeFlowTime, 1);
     const onTime = travel <= free * TRIP.onTimeFactor + TRIP.onTimeSlack;
     const s = this.stats;
-    s.completed++;
+    // A bus counts every passenger it brings.
+    s.completed += v.passengers;
     if (onTime) s.onTime++;
     s.totalTravelTime += travel;
     s.totalFreeFlowTime += free;
@@ -281,6 +280,8 @@ export class Simulation {
         origin: v.origin,
         destination: v.destination,
         createdAt: this.time,
+        ...(v.passengers > 1 ? { passengers: v.passengers } : {}),
+        ...(v.kind === 'otobus' || origin.kind === 'durak' ? { kind: v.kind } : {}),
       });
     }
     this.events.emit('tripFailed', { reason, origin: v.origin, destination: v.destination, vehicleId: v.id });

@@ -2,7 +2,8 @@ import { Application, Container, Graphics, Text } from 'pixi.js';
 import { GEOM } from '../core/constants';
 import type { GameSession } from '../gameplay/game-session';
 import type { PreviewCell } from '../map/road-editor';
-import { drawBuildingStatus, drawBuildings } from './building-renderer';
+import { drawBuildingStatus, drawBuildings, drawStations } from './building-renderer';
+import { darkness, hourAt } from '../gameplay/daytime';
 import { Ambience } from './ambience';
 import { Camera } from './camera';
 import { drawGridlocks, drawHover, drawPreview, drawSelection, drawSignals, drawTraffic } from './effects';
@@ -81,6 +82,7 @@ export class Renderer {
       this.traffic,
       this.buildings,
       this.status,
+      this.ambience.night,
       this.outside,
       this.vehicles.container,
       this.ambience.container,
@@ -418,6 +420,7 @@ export class Renderer {
     drawRoads(this.roads, s.sim.grid, this.theme, s.sim.graph);
     this.drawSigns();
     drawBuildings(this.buildings, s.sim.buildings, s.sim.grid.width, this.theme);
+    drawStations(this.buildings, s.sim.buildings, s.sim.grid.width, this.theme);
     this.overlayTimer = 0;
   }
 
@@ -461,6 +464,15 @@ export class Renderer {
     if (s && this.paths) {
       this.vehicles.update(alpha);
       this.ambience.update(frameSeconds, this.options.reduceMotion);
+      // Night and rain over the visible part of the map.
+      const tl = this.camera.toWorld(0, 0);
+      const br = this.camera.toWorld(this.host.clientWidth, this.host.clientHeight);
+      this.ambience.weather(
+        this.options.highContrast ? 0 : darkness(hourAt(s.sim.time)),
+        s.event?.kind === 'yagmur' && !this.options.reduceMotion,
+        { x: tl.x, y: tl.y, w: br.x - tl.x, h: br.y - tl.y },
+        frameSeconds,
+      );
       const pulse = this.options.reduceMotion ? 0.5 : 0.5 + 0.5 * Math.sin(this.time * 4);
       this.overlayTimer -= frameSeconds;
       if (this.overlayTimer <= 0) {

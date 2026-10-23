@@ -173,6 +173,8 @@ export function junctionCurve(
   inOffset: number,
   outDir: Dir,
   outOffset: number,
+  /** Swing out to the right (around a roundabout island). */
+  bulge = 0,
 ): JunctionCurve {
   const R = GEOM.junctionRadius;
   const [inx, iny] = rightNormal(inDir);
@@ -185,10 +187,10 @@ export function junctionCurve(
   return {
     p0x,
     p0y,
-    p1x: p0x + (DX[inDir] as number) * k,
-    p1y: p0y + (DY[inDir] as number) * k,
-    p2x: p3x - (DX[outDir] as number) * k,
-    p2y: p3y - (DY[outDir] as number) * k,
+    p1x: p0x + (DX[inDir] as number) * k + inx * bulge,
+    p1y: p0y + (DY[inDir] as number) * k + iny * bulge,
+    p2x: p3x - (DX[outDir] as number) * k + onx * bulge,
+    p2y: p3y - (DY[outDir] as number) * k + ony * bulge,
     p3x,
     p3y,
   };

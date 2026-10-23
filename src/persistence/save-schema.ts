@@ -6,7 +6,7 @@ import {
   type VehicleKind,
 } from '../core/constants';
 import type { SimStats, StatSample } from '../core/simulation';
-import type { Building, BuildingKind, TripRequest } from '../core/world-state';
+import type { Building, BuildingKind, TransitStation, TripRequest } from '../core/world-state';
 import type { GameSummary } from '../gameplay/game-over';
 import type { Upgrade } from '../gameplay/game-session';
 import type { ScoreState } from '../gameplay/scoring';
@@ -30,6 +30,8 @@ export interface Settings {
   version: number;
   /** 0..1 */
   volume: number;
+  /** Background music, 0..1 (0 = off). */
+  music: number;
   muted: boolean;
   reduceMotion: ReduceMotion;
   highContrast: boolean;
@@ -45,6 +47,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
   volume: 0.6,
+  music: 0.4,
   muted: false,
   reduceMotion: 'system',
   highContrast: false,
@@ -59,6 +62,7 @@ export function parseSettings(raw: unknown): Settings {
   return {
     version: SETTINGS_VERSION,
     volume: num(o.volume, 'volume', 0, 1),
+    music: o.music === undefined ? DEFAULT_SETTINGS.music : num(o.music, 'music', 0, 1),
     muted: bool(o.muted, 'muted'),
     reduceMotion: oneOf(o.reduceMotion, 'reduceMotion', ['system', 'on', 'off'] as const),
     highContrast: bool(o.highContrast, 'highContrast'),
@@ -73,6 +77,12 @@ export interface Records {
   version: number;
   bestScores: Record<string, number>;
   history: GameSummary[];
+  /** Unlocked achievement ids. */
+  achievements: string[];
+  /** Running totals across games (e.g. gulls caught, ferry and metro passengers). */
+  counters: Record<string, number>;
+  /** Best score of each day's daily map, by date (YYYY-MM-DD). */
+  daily: Record<string, number>;
 }
 
 export const MAX_HISTORY = 20;
@@ -83,7 +93,7 @@ export function bestScoreKey(districtId: string, mode: GameMode): string {
 }
 
 export function emptyRecords(): Records {
-  return { version: RECORDS_VERSION, bestScores: {}, history: [] };
+  return { version: RECORDS_VERSION, bestScores: {}, history: [], achievements: [], counters: {}, daily: {} };
 }
 
 function parseSummary(raw: unknown, p: string): GameSummary {
@@ -119,7 +129,27 @@ export function parseRecords(raw: unknown): Records {
   const history = arr(o.history, 'history', MAX_HISTORY * 2)
     .slice(0, MAX_HISTORY)
     .map((h, i) => parseSummary(h, `history[${i}]`));
-  return { version: RECORDS_VERSION, bestScores, history };
+  // Added later: older records simply have none yet.
+  const achievements =
+    o.achievements === undefined
+      ? []
+      : arr(o.achievements, 'achievements', 100).map((a, i) => str(a, `achievements[${i}]`, 40));
+  const numbers = (raw: unknown, p: string, limit: number): Record<string, number> => {
+    const out: Record<string, number> = {};
+    if (raw === undefined) return out;
+    for (const [k, v] of Object.entries(obj(raw, p)).slice(0, limit)) {
+      if (k.length <= 40) out[k] = num(v, `${p}.${k}`, 0);
+    }
+    return out;
+  };
+  return {
+    version: RECORDS_VERSION,
+    bestScores,
+    history,
+    achievements,
+    counters: numbers(o.counters, 'counters', 50),
+    daily: numbers(o.daily, 'daily', 400),
+  };
 }
 
 // ------------------------------------------------------------------- saves
@@ -148,7 +178,16 @@ export interface SavedGame {
   demandReassign: number;
   nextVehicleId: number;
   nextTripId: number;
-  grid: { road: string; links: string; lanes: string; locked: string; signal: string; overpass: string };
+  grid: {
+    road: string;
+    links: string;
+    lanes: string;
+    locked: string;
+    signal: string;
+    overpass: string;
+    paid?: string;
+    roundabout?: string;
+  };
   buildings: Building[];
   vehicles: Vehicle[];
   trailing: TrailingHold[];
@@ -156,7 +195,14 @@ export interface SavedGame {
   junctionDelay: [string, number][];
 }
 
-const RESOURCE_KINDS: readonly ResourceKind[] = ['roads', 'bridges', 'boulevards', 'lights'];
+const RESOURCE_KINDS: readonly ResourceKind[] = [
+  'roads',
+  'bridges',
+  'boulevards',
+  'lights',
+  'roundabouts',
+  'lines',
+];
 
 function parseBounds(raw: unknown, width: number, height: number): Bounds {
   const o = obj(raw, 'bounds');
@@ -177,6 +223,8 @@ function parseResources(raw: unknown, p: string): Resources {
     bridges: int(o.bridges, `${p}.bridges`, 0, 1_000_000),
     boulevards: int(o.boulevards, `${p}.boulevards`, 0, 1_000_000),
     lights: int(o.lights, `${p}.lights`, 0, 1_000_000),
+    roundabouts: o.roundabouts === undefined ? 0 : int(o.roundabouts, `${p}.roundabouts`, 0, 1_000_000),
+    lines: o.lines === undefined ? 0 : int(o.lines, `${p}.lines`, 0, 1_000_000),
   };
 }
 
@@ -200,7 +248,7 @@ const VEHICLE_STATES: readonly VehicleState[] = [
   'noRoute',
 ];
 const KINDS = Object.keys(VEHICLE_TYPES) as VehicleKind[];
-const BUILDING_KINDS: readonly BuildingKind[] = ['konut', 'ticari', 'kapi'];
+const BUILDING_KINDS: readonly BuildingKind[] = ['konut', 'ticari', 'kapi', 'durak'];
 
 function dir(v: unknown, p: string): Dir {
   return int(v, p, 0, 3) as Dir;
@@ -219,6 +267,23 @@ function parseTrip(raw: unknown, p: string): TripRequest {
     origin: int(o.origin, `${p}.origin`, 0),
     destination: int(o.destination, `${p}.destination`, 0),
     createdAt: num(o.createdAt, `${p}.createdAt`),
+    ...(o.passengers === undefined ? {} : { passengers: int(o.passengers, `${p}.passengers`, 1, 50) }),
+    ...(o.kind === undefined ? {} : { kind: oneOf(o.kind, `${p}.kind`, KINDS) }),
+  };
+}
+
+function parseStation(raw: unknown, p: string): TransitStation {
+  const o = obj(raw, p);
+  return {
+    mode: oneOf(o.mode, `${p}.mode`, ['vapur', 'metro'] as const),
+    partner: int(o.partner, `${p}.partner`, 0, 10_000),
+    riders: arr(o.riders, `${p}.riders`, 500).map((r, i) => {
+      const ro = obj(r, `${p}.riders[${i}]`);
+      return {
+        trip: parseTrip(ro.trip, `${p}.riders[${i}].trip`),
+        readyAt: num(ro.readyAt, `${p}.riders[${i}].readyAt`),
+      };
+    }),
   };
 }
 
@@ -243,6 +308,7 @@ function parseBuilding(raw: unknown, p: string, cells: number): Building {
     unreachable: bool(o.unreachable, `${p}.unreachable`),
     pinTimer: num(o.pinTimer, `${p}.pinTimer`, -1000, 1000),
     overflow: num(o.overflow, `${p}.overflow`, 0, 1),
+    ...(o.transit === undefined ? {} : { transit: parseStation(o.transit, `${p}.transit`) }),
   };
 }
 
@@ -305,6 +371,7 @@ function parseVehicle(raw: unknown, p: string): Vehicle {
     noRouteTimer: num(o.noRouteTimer, `${p}.noRouteTimer`, 0),
     rerouteTimer: num(o.rerouteTimer, `${p}.rerouteTimer`),
     paint: num(o.paint, `${p}.paint`, 0, 1),
+    passengers: o.passengers === undefined ? 1 : int(o.passengers, `${p}.passengers`, 1, 50),
   };
 }
 
@@ -399,6 +466,10 @@ export function parseSavedGame(raw: unknown): SavedGame {
       locked: str(grid.locked, 'grid.locked', cells * 2),
       signal: str(grid.signal, 'grid.signal', cells * 2),
       overpass: str(grid.overpass, 'grid.overpass', cells * 2),
+      ...(grid.paid === undefined ? {} : { paid: str(grid.paid, 'grid.paid', cells * 2) }),
+      ...(grid.roundabout === undefined
+        ? {}
+        : { roundabout: str(grid.roundabout, 'grid.roundabout', cells * 2) }),
     },
     buildings: arr(o.buildings, 'buildings', 500).map((b, i) => parseBuilding(b, `buildings[${i}]`, cells)),
     vehicles: arr(o.vehicles, 'vehicles', 2000).map((v, i) => parseVehicle(v, `vehicles[${i}]`)),

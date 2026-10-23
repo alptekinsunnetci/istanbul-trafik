@@ -1,9 +1,12 @@
 import { GEOM, type GameMode, SIM } from '../core/constants';
 import { BUILDING_TYPES, type Building, COLOR_NAMES } from '../core/world-state';
 import { GameSession, type EditTool } from '../gameplay/game-session';
+import { newlyUnlocked } from '../gameplay/achievements';
+import { type DailyMap, dailyMap, dailyShareText } from '../gameplay/daily';
 import { restoreSession, toSnapshot } from '../gameplay/snapshot';
 import { districtById } from '../map/districts';
 import { Terrain } from '../map/grid';
+import { noResources } from '../map/road-editor';
 import { DEFAULT_SETTINGS, type Settings, bestScoreKey } from '../persistence/save-schema';
 import { SaveManager, browserStorage, type WriteResult } from '../persistence/save-manager';
 import { Renderer, UnsupportedRendererError } from '../rendering/renderer';
@@ -37,8 +40,17 @@ const TOOL_LABELS: Record<Tool, string> = {
   boulevard: 'Bulvar seçildi: bir yolun üstünden sürükleyin',
   erase: 'Silgi seçildi',
   signal: 'Trafik ışığı seçildi: bir kavşağa dokunun',
+  roundabout: 'Göbek seçildi: bir kavşağa dokunun',
+  transit: 'Hat seçildi: iki yer arasında sürükleyin',
 };
-const KEY_TOOLS: Record<string, Tool> = { '1': 'road', '2': 'boulevard', '3': 'erase', '4': 'signal' };
+const KEY_TOOLS: Record<string, Tool> = {
+  '1': 'road',
+  '2': 'boulevard',
+  '3': 'erase',
+  '4': 'signal',
+  '5': 'roundabout',
+  '6': 'transit',
+};
 
 function randomSeed(): number {
   const a = new Uint32Array(1);
@@ -121,6 +133,7 @@ export class GameController {
       {
         continueGame: () => this.continueGame(),
         newGame: (id, seed, mode) => this.newGame(id, seed ?? randomSeed(), mode),
+        startDaily: () => this.startDaily(),
         startTutorial: () => this.startTutorial(),
         setMode: (mode) => {
           this.settings = { ...this.settings, mode };
@@ -151,6 +164,8 @@ export class GameController {
     this.state.onChange((s, o) => {
       this.root.dataset.state = s;
       this.root.dataset.overlay = o;
+      // Background music while a game is being played.
+      this.sound.setMusic(s === 'playing' && o === 'none');
       this.refreshChrome();
     });
 
@@ -273,7 +288,9 @@ export class GameController {
       ev.on('week', () => this.sound.play('week')),
       ev.on('gullCall', () => this.sound.play('gull')),
       ev.on('horn', () => this.sound.play('horn')),
+      ev.on('transitDelivered', (n) => this.count('transit', n)),
       ev.on('gullCaught', (g) => {
+        this.count('gulls');
         this.sound.play('collect');
         this.renderer?.popText(g.x, g.y - 6, `+${g.roads} yol`);
         this.announcer.say(`Martıyı yakaladın: +${g.roads} yol`);
@@ -311,6 +328,7 @@ export class GameController {
 
   private newGame(districtId: string, seed: number, mode: GameMode, tutorial = false): void {
     if (!districtById(districtId)) return;
+    this.daily = null;
     this.menu.hide();
     this.modal?.close();
     this.modal = null;
@@ -331,6 +349,48 @@ export class GameController {
     // The game starts right away; demand begins slowly.
     this.toggleRun();
     this.announcer.say(`${this.session?.district.name}. Evleri aynı renkteki iş yerine yolla bağlayın.`);
+  }
+
+  /** Today's map: same district and seed for everyone, on Normal. */
+  private startDaily(): void {
+    const today = dailyMap(new Date());
+    this.newGame(today.districtId, today.seed, 'normal');
+    this.daily = today;
+    this.toasts.show(`Günün haritası: ${this.session?.district.name ?? ''}`, 'info', 3000);
+  }
+
+  // ----------------------------------------------------------- achievements
+
+  /** Unlocks achievements the current game has reached (checked once a second). */
+  private checkAchievements(): void {
+    const s = this.session;
+    if (!s) return;
+    const counters = this.pendingCounters;
+    const dirty = Object.keys(counters).length > 0;
+    let records = this.saves.loadRecords().value;
+    const fresh = newlyUnlocked({ session: s, records }, new Set(records.achievements));
+    if (!dirty && fresh.length === 0) return;
+    const next = this.saves.updateRecords((r) => {
+      for (const [k, v] of Object.entries(counters)) r.counters[k] = (r.counters[k] ?? 0) + v;
+      for (const a of fresh) if (!r.achievements.includes(a.id)) r.achievements.push(a.id);
+    });
+    records = next.records;
+    this.pendingCounters = {};
+    // Counters may unlock more right away.
+    const more = dirty ? newlyUnlocked({ session: s, records }, new Set(records.achievements)) : [];
+    if (more.length > 0)
+      this.saves.updateRecords((r) => {
+        for (const a of more) if (!r.achievements.includes(a.id)) r.achievements.push(a.id);
+      });
+    for (const a of [...fresh, ...more]) {
+      this.toasts.show(`Başarım: ${a.title} — ${a.text}`, 'success', 4500);
+      this.announcer.say(`Başarım açıldı: ${a.title}`);
+      this.sound.play('collect');
+    }
+  }
+
+  private count(name: string, n = 1): void {
+    this.pendingCounters[name] = (this.pendingCounters[name] ?? 0) + n;
   }
 
   // ------------------------------------------------------------- tutorial
@@ -521,6 +581,14 @@ export class GameController {
     this.saves.clearGame();
     this.sound.play('gameover');
     const r = this.saves.addResult(summary);
+    const daily = this.daily;
+    if (daily) {
+      this.saves.updateRecords((rec) => {
+        rec.daily[daily.key] = Math.max(rec.daily[daily.key] ?? 0, summary.score);
+        rec.counters.daily = (rec.counters.daily ?? 0) + 1;
+      });
+    }
+    this.checkAchievements();
     if (!r.write.ok) this.toasts.show(`Skor kaydedilemedi: ${r.write.error ?? ''}`, 'error');
     const best = r.records.bestScores[bestScoreKey(summary.districtId, summary.mode)] ?? summary.score;
     this.announcer.say(`Oyun bitti. Skor ${summary.score}.`);
@@ -533,7 +601,29 @@ export class GameController {
         this.modal = null;
         this.toMainMenu();
       },
+      ...(daily
+        ? {
+            share: () =>
+              void this.share(
+                dailyShareText(daily, summary.districtName, summary.score, location.href.split('?')[0] ?? ''),
+              ),
+          }
+        : {}),
     });
+  }
+
+  /** Shares a text with the system share sheet, or copies it. */
+  private async share(text: string): Promise<void> {
+    try {
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ text });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      this.toasts.show('Sonuç panoya kopyalandı.', 'success', 2500);
+    } catch {
+      this.toasts.show('Paylaşılamadı.', 'warning', 2500);
+    }
   }
 
   private autosave(): void {
@@ -578,6 +668,11 @@ export class GameController {
         s.usesBridges,
       );
       this.updateTutorial();
+      this.achTimer -= 0.1;
+      if (this.achTimer <= 0) {
+        this.achTimer = 1;
+        this.checkAchievements();
+      }
       this.updateBanner(s);
       this.stats.update(s);
       this.updateInspector();
@@ -601,7 +696,7 @@ export class GameController {
       this.tool,
       this.renderer?.trafficOverlay ?? false,
       s?.editable ?? false,
-      s?.resources ?? { roads: 0, bridges: 0, boulevards: 0, lights: 0 },
+      s?.resources ?? noResources(),
       s?.canUndo ?? false,
       s?.usesBridges ?? true,
     );
@@ -745,6 +840,8 @@ export class GameController {
     this.settings = s;
     this.sound.volume = s.volume;
     this.sound.muted = s.muted;
+    this.sound.musicVolume = s.music;
+    this.sound.updateMusic();
     const reduce = prefersReducedMotion(s.reduceMotion);
     this.root.classList.toggle('reduce-motion', reduce);
     this.root.classList.toggle('high-contrast', s.highContrast);
@@ -836,6 +933,11 @@ export class GameController {
 
   /** Tool used by the current stroke (the right mouse button always erases). */
   private strokeTool: EditTool = 'road';
+  /** Today's map when the current game is the daily one. */
+  private daily: DailyMap | null = null;
+  private achTimer = 1;
+  /** Counter increments not yet written to the records. */
+  private pendingCounters: Record<string, number> = {};
 
   private editTool(): EditTool {
     return this.strokeTool;
@@ -910,7 +1012,9 @@ export class GameController {
         text =
           b.kind === 'kapi'
             ? `${b.name} · şehir dışına giden otoyol`
-            : `${b.name} · ${COLOR_NAMES[b.color] ?? ''} ${BUILDING_TYPES[b.kind].label.toLocaleLowerCase('tr')}`;
+            : b.transit
+              ? `${b.name} · ${b.transit.mode === 'vapur' ? 'vapur iskelesi' : 'metro istasyonu'} · ${b.transit.riders.length} yolcu yolda`
+              : `${b.name} · ${COLOR_NAMES[b.color] ?? ''} ${BUILDING_TYPES[b.kind].label.toLocaleLowerCase('tr')}`;
         if (b.kind === 'konut' && b.pending.length > 0) text += ` · ${b.pending.length} araç bekliyor`;
         if (b.kind === 'konut' && b.unreachable && b.pending.length > 0) text += ' · iş yerine yol yok';
       }
@@ -946,7 +1050,13 @@ export class GameController {
     // A gull can be caught with any tool.
     if (r.pickGull(clientX, clientY) && s.catchGull()) return true;
     // With the eraser or the light tool a tap edits instead of inspecting.
-    if (this.tool === 'erase' || this.tool === 'signal') return false;
+    if (
+      this.tool === 'erase' ||
+      this.tool === 'signal' ||
+      this.tool === 'roundabout' ||
+      this.tool === 'transit'
+    )
+      return false;
     const vid = r.pickVehicle(clientX, clientY);
     const cell = r.cellAt(clientX, clientY);
     const bid = vid === null && cell >= 0 ? (s.sim.grid.building[cell] as number) : -1;

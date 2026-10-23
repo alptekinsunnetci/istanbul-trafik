@@ -1,5 +1,5 @@
 import { Container, Graphics, GraphicsContext } from 'pixi.js';
-import { GEOM, VEHICLE_TYPES, type VehicleKind } from '../core/constants';
+import { GEOM, ROUNDABOUT, VEHICLE_TYPES, type VehicleKind } from '../core/constants';
 import {
   type JunctionCurve,
   type LanePath,
@@ -54,7 +54,8 @@ export class PathCache {
       const node = graph.node(pass.node);
       const cx = node?.cx ?? ((pass.node % this.grid.width) + 0.5) * GEOM.cellSize;
       const cy = node?.cy ?? (Math.floor(pass.node / this.grid.width) + 0.5) * GEOM.cellSize;
-      const curve = junctionCurve(cx, cy, pass.inDir, pass.inOffset, pass.outDir, pass.outOffset);
+      const bulge = this.grid.roundabout[pass.node] === 1 ? ROUNDABOUT.bulge : 0;
+      const curve = junctionCurve(cx, cy, pass.inDir, pass.inOffset, pass.outDir, pass.outOffset, bulge);
       c = { curve, length: curveLength(curve) };
       this.curves.set(pass, c);
     }
@@ -207,7 +208,25 @@ function buildVehicleContext(kind: VehicleKind, color: number): GraphicsContext 
   const L = VEHICLE_TYPES[kind].length * LENGTH_SCALE;
   const W = WIDTH * WIDTH_SCALE;
   const ctx = new GraphicsContext();
-  ctx.roundRect(-L / 2, -W / 2, L, W, W * 0.4).fill(color);
+  ctx.roundRect(-L / 2, -W / 2, L, W, W * (kind === 'otobus' ? 0.2 : 0.4)).fill(color);
+  if (kind === 'otobus') {
+    // City bus: dark window bands along both sides and a light roof hatch.
+    ctx.rect(-L / 2 + L * 0.08, -W / 2 + W * 0.1, L * 0.8, W * 0.16).fill({ color: 0x1f2630, alpha: 0.55 });
+    ctx.rect(-L / 2 + L * 0.08, W / 2 - W * 0.26, L * 0.8, W * 0.16).fill({ color: 0x1f2630, alpha: 0.55 });
+    ctx.rect(-L * 0.08, -W * 0.18, L * 0.16, W * 0.36).fill({ color: 0xffffff, alpha: 0.6 });
+  } else if (kind === 'dolmus') {
+    // Dolmuş (minibus): a white roof.
+    ctx.roundRect(-L * 0.34, -W * 0.32, L * 0.56, W * 0.64, W * 0.15).fill({ color: 0xffffff, alpha: 0.75 });
+  } else if (kind === 'taxi') {
+    // Taxi: the yellow roof sign.
+    ctx
+      .roundRect(-L * 0.12, -W * 0.22, L * 0.2, W * 0.44, W * 0.1)
+      .fill(0xf6c445)
+      .stroke({
+        width: 0.25,
+        color: 0x3a3a3a,
+      });
+  }
   // A light band at the front shows the driving direction.
   ctx
     .roundRect(L / 2 - L * 0.26, -W / 2 + W * 0.18, L * 0.14, W * 0.64, W * 0.12)

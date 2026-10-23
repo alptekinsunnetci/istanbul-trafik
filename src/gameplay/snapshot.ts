@@ -42,6 +42,8 @@ export function toSnapshot(session: GameSession, now: Date = new Date()): SavedG
       locked: bytesToBase64(g.locked),
       signal: bytesToBase64(g.signal),
       overpass: bytesToBase64(g.overpass),
+      paid: bytesToBase64(g.paid),
+      roundabout: bytesToBase64(g.roundabout),
     },
     buildings: clone(sim.buildings),
     vehicles: clone(sim.vehicles),
@@ -84,6 +86,11 @@ function applySnapshot(session: GameSession, save: SavedGame): void {
   g.locked.set(base64ToBytes(save.grid.locked, n, 'grid.locked'));
   g.signal.set(base64ToBytes(save.grid.signal, n, 'grid.signal'));
   g.overpass.set(base64ToBytes(save.grid.overpass, n, 'grid.overpass'));
+  // Older saves did not record free diagonal cells: every road cell counts as paid.
+  if (save.grid.paid !== undefined) g.paid.set(base64ToBytes(save.grid.paid, n, 'grid.paid'));
+  if (save.grid.roundabout !== undefined)
+    g.roundabout.set(base64ToBytes(save.grid.roundabout, n, 'grid.roundabout'));
+  else for (let i = 0; i < n; i++) g.paid[i] = g.road[i] === 1 && g.locked[i] === 0 ? 1 : 0;
   g.building.fill(-1);
 
   // Sanitise the road layer: links only between road cells, valid lane counts.
@@ -98,6 +105,7 @@ function applySnapshot(session: GameSession, save: SavedGame): void {
       g.locked[i] = 0;
       g.signal[i] = 0;
       g.overpass[i] = 0;
+      g.roundabout[i] = 0;
       continue;
     }
     if (g.terrain[i] === Terrain.Park) throw new Error('Kayıt: park üzerinde yol');

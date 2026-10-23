@@ -1,6 +1,7 @@
-import { DEMAND, THROUGH } from '../core/constants';
+import { DEMAND, THROUGH, TRANSIT } from '../core/constants';
 import type { Random } from '../core/random';
 import type { Building, TripRequest } from '../core/world-state';
+import { board, dispatch, isStation, ridersFor, transitOptions } from './transit';
 
 export interface DemandContext {
   time: number;
@@ -20,6 +21,10 @@ export interface DemandContext {
  */
 export class DemandGenerator {
   multiplier: number;
+  /** Time of day: rush hours above 1, night below 1. */
+  timeFactor = 1;
+  /** Event boosts per workplace id (e.g. a match day). */
+  readonly boosts = new Map<number, number>();
   reassignTimer = 0;
 
   constructor(multiplier = 1) {
@@ -38,9 +43,11 @@ export class DemandGenerator {
   update(ctx: DemandContext): TripRequest[] {
     const created: TripRequest[] = [];
     this.through(ctx, created);
+    // Passengers who arrived at a station get into a bus or taxis.
+    for (const b of ctx.buildings) if (isStation(b)) dispatch(b, ctx.time, ctx.nextTripId);
     for (const w of ctx.buildings) {
       if (w.kind !== 'ticari' || !isActive(w, ctx.time)) continue;
-      w.pinTimer -= ctx.dt;
+      w.pinTimer -= ctx.dt * this.timeFactor * (this.boosts.get(w.id) ?? 1);
       if (w.pinTimer > 0) continue;
       w.pinTimer += this.pinInterval(ctx.time);
       const trip = this.createPin(w, ctx);
@@ -80,7 +87,7 @@ export class DemandGenerator {
       created.push(trip);
     };
     for (const g of gates) {
-      g.pinTimer -= ctx.dt;
+      g.pinTimer -= ctx.dt * this.timeFactor;
       if (g.pinTimer > 0) continue;
       g.pinTimer += this.throughInterval(ctx.time);
       const roll = ctx.rng.next();
@@ -124,6 +131,20 @@ export class DemandGenerator {
     );
     if (houses.length === 0) return null;
     const reachable = houses.filter((h) => ctx.reachable(h, w));
+    // A ferry or metro line: always when no house can drive there, otherwise for a share of the trips.
+    const lines = transitOptions(ctx.buildings, w, ctx.reachable, (h) => isActive(h, ctx.time));
+    if (lines.length > 0 && (reachable.length === 0 || ctx.rng.next() < TRANSIT.share)) {
+      const option = ctx.rng.pick(lines);
+      const house = ctx.rng.pick(option.houses);
+      const trip: TripRequest = {
+        id: ctx.nextTripId(),
+        origin: house.id,
+        destination: w.id,
+        createdAt: ctx.time,
+      };
+      board(trip, house, option, ctx.time);
+      return trip;
+    }
     const pool = reachable.length > 0 ? reachable : houses;
     const i = ctx.rng.weightedIndex(
       pool.map((h) => 1 / (1 + h.pending.length) / (1 + Math.hypot(h.x - w.x, h.y - w.y) / 20)),
@@ -169,11 +190,15 @@ function reassign(ctx: DemandContext): void {
   }
 }
 
-/** Pins shown on a workplace: trips waiting for a car plus cars on their way. */
+/**
+ * Pins shown on a workplace: trips waiting for a car, people on the way by
+ * car, bus or taxi, and passengers riding a ferry or metro towards it.
+ */
 export function pinsAt(buildings: readonly Building[], workplace: Building): number {
   let n = workplace.incoming;
-  for (const b of buildings) for (const t of b.pending) if (t.destination === workplace.id) n++;
-  return n;
+  for (const b of buildings)
+    for (const t of b.pending) if (t.destination === workplace.id) n += t.passengers ?? 1;
+  return n + ridersFor(buildings, workplace);
 }
 
 /** Fraction (0..1) of the overflow timer that is used up (stored as a fraction). */

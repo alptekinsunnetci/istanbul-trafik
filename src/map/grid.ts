@@ -49,6 +49,16 @@ export class Grid {
    * straight through the cell without meeting, so it is no junction.
    */
   readonly overpass: Uint8Array;
+  /**
+   * 1 where building the road cost a piece. Every second cell of a diagonal
+   * is free (a diagonal step costs one piece, like a straight one), and only
+   * paid cells give a piece back when erased.
+   */
+  readonly paid: Uint8Array;
+  /** Roundabout (göbekli kavşak) on this junction cell. */
+  readonly roundabout: Uint8Array;
+  /** Temporarily closed for road works (an event); not saved. */
+  readonly closed: Uint8Array;
   readonly building: Int32Array;
   /** Incremented on every road change. */
   version = 0;
@@ -69,6 +79,9 @@ export class Grid {
     this.highway = new Uint8Array(n);
     this.signal = new Uint8Array(n);
     this.overpass = new Uint8Array(n);
+    this.paid = new Uint8Array(n);
+    this.roundabout = new Uint8Array(n);
+    this.closed = new Uint8Array(n);
     this.building = new Int32Array(n).fill(-1);
   }
 

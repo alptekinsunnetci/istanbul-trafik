@@ -980,6 +980,19 @@ input[aria-invalid='true'] {
   flex: 1;
 }
 
+.achievements li {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.achievements li.achieved {
+  background: color-mix(in srgb, var(--paper) 70%, #f6c445);
+}
+
+.daily-pill {
+  font-weight: 700;
+}
+
 /* ---------------------------------------------------------------- dialogs */
 
 .backdrop {
@@ -1203,16 +1216,23 @@ input[aria-invalid='true'] {
   .dock-wrap {
     bottom: 18px;
   }
+  /* Up to eight tools must fit a phone screen side by side. */
   .dock {
-    gap: 16px;
+    gap: 7px;
+  }
+  .dock-sep {
+    margin: 0 -2px;
   }
   .badge {
-    width: 46px;
-    height: 46px;
-  }
-  .badge-light {
     width: 40px;
     height: 40px;
+  }
+  .badge-light {
+    width: 36px;
+    height: 36px;
+  }
+  .badge-label {
+    font-size: 0.68rem;
   }
   .banner {
     bottom: 86px;

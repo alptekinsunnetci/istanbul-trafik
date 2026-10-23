@@ -5,6 +5,8 @@ import { Terrain } from '../map/grid';
 import { createDistrictGrid } from '../map/map-generator';
 import { type Records, bestScoreKey } from '../persistence/save-schema';
 import { SEASONS, seasonOf } from '../rendering/theme';
+import { ACHIEVEMENTS } from '../gameplay/achievements';
+import { dailyMap } from '../gameplay/daily';
 import { Modal } from './accessibility';
 import { button, formatNumber, formatPercent, formatTime, h, icon } from './dom';
 
@@ -15,6 +17,7 @@ export interface MenuActions {
   setMode(mode: GameMode): void;
   openSettings(): void;
   openHelp(): void;
+  startDaily(): void;
 }
 
 const DOTS: Record<District['difficulty'], string> = { kolay: '●○○', orta: '●●○', zor: '●●●' };
@@ -54,7 +57,7 @@ function districtPreview(d: District): HTMLImageElement {
 /** Start screen: districts first, everything else as quiet links. */
 export class MainMenu {
   readonly root = h('section', { class: 'screen menu-screen', 'aria-labelledby': 'menu-title' });
-  private view: 'home' | 'records' = 'home';
+  private view: 'home' | 'records' | 'achievements' = 'home';
 
   constructor(
     private actions: MenuActions,
@@ -74,7 +77,7 @@ export class MainMenu {
     this.root.remove();
   }
 
-  private go(view: 'home' | 'records'): void {
+  private go(view: 'home' | 'records' | 'achievements'): void {
     this.view = view;
     this.render();
     this.root.querySelector<HTMLElement>('[data-autofocus]')?.focus();
@@ -87,7 +90,9 @@ export class MainMenu {
       h('h1', { id: 'menu-title', class: 'menu-title', text: 'İstanbul Trafik' }),
       h('p', { class: 'menu-tagline', text: 'Mahalleleri yollarla bağla. Trafik aksın, şehir büyüsün.' }),
     );
-    panel.append(this.view === 'home' ? this.home() : this.records());
+    panel.append(
+      this.view === 'home' ? this.home() : this.view === 'records' ? this.records() : this.achievements(),
+    );
     this.root.replaceChildren(panel);
   }
 
@@ -158,7 +163,17 @@ export class MainMenu {
       grid.append(card);
     });
 
+    // The daily map: same district and seed for everyone today.
+    const today = dailyMap(new Date());
+    const todayDistrict = DISTRICTS.find((d) => d.id === today.districtId);
+    const todayBest = records.daily[today.key];
+    const daily = button(
+      `Günün haritası · ${todayDistrict?.name ?? ''}${todayBest !== undefined ? ` · en iyi ${formatNumber(todayBest)}` : ''}`,
+      () => this.actions.startDaily(),
+      { className: 'pill daily-pill', id: 'btn-daily' },
+    );
     const links = h('div', { class: 'menu-links' });
+    links.append(daily);
     links.append(
       button('Oynayarak öğren', () => this.actions.startTutorial(), {
         className: 'pill',
@@ -175,6 +190,14 @@ export class MainMenu {
     }
     links.append(
       button('Skorlar', () => this.go('records'), { className: 'link', id: 'btn-records' }),
+      button(
+        `Başarımlar ${records.achievements.length}/${ACHIEVEMENTS.length}`,
+        () => this.go('achievements'),
+        {
+          className: 'link',
+          id: 'btn-achievements',
+        },
+      ),
       button('Ayarlar', () => this.actions.openSettings(), { className: 'link', id: 'btn-menu-settings' }),
       button('Nasıl oynanır?', () => this.actions.openHelp(), { className: 'link', id: 'btn-menu-help' }),
     );
@@ -207,6 +230,31 @@ export class MainMenu {
       group.append(b);
     }
     return group;
+  }
+
+  private achievements(): HTMLElement {
+    const have = new Set(this.getRecords().achievements);
+    const list = h('ul', { class: 'records achievements' });
+    for (const a of ACHIEVEMENTS) {
+      const done = have.has(a.id);
+      list.append(
+        h(
+          'li',
+          { class: done ? 'achieved' : 'muted' },
+          h('span', { text: `${done ? '★' : '☆'} ${a.title}` }),
+          h('span', { class: 'muted', text: a.text }),
+        ),
+      );
+    }
+    const back = button('Geri', () => this.go('home'), { className: 'pill' });
+    back.dataset.autofocus = '';
+    return h(
+      'div',
+      { class: 'menu-section' },
+      h('h2', { class: 'menu-h2', text: `Başarımlar (${have.size}/${ACHIEVEMENTS.length})` }),
+      list,
+      back,
+    );
   }
 
   private records(): HTMLElement {
@@ -272,6 +320,8 @@ export function helpContent(): HTMLElement {
     ['Geri al (Ctrl+Z)', 'Son çizimi geri al, parçalar geri gelir'],
     ['Sil ya da sağ tık + sürükle', 'Yolu sil (parçalar geri gelir)'],
     ['Işık, sonra kavşağa dokun', 'Trafik ışığı koy / kaldır (4)'],
+    ['Göbek, sonra kavşağa dokun', 'Göbekli kavşak koy / kaldır (5)'],
+    ['Hat, sonra iki yer arası sürükle', 'Vapur ya da metro hattı kur; durağa dokununca kalkar (6)'],
     ['Araca / binaya dokun', 'Ayrıntıları gör'],
     ['Tekerlek, + / −', 'Yakınlaştır / uzaklaştır'],
     ['Orta tık + sürükle, W A S D', 'Haritayı kaydır'],
@@ -316,6 +366,12 @@ export function helpContent(): HTMLElement {
         text: 'Dere, Haliç ya da Boğaz’ın karşı kıyısında da binalar çıkar: oraya köprüyle ulaşırsın. Otoyolun üstünden düz geçen yol üst geçit olur.',
       }),
       h('li', {
+        text: 'Göbek: kavşağa göbek koyarsan araçlar durmadan, yavaşlayarak döner. Hat: iki yer arasında sürükleyerek vapur (su üstünden) ya da metro hattı kur; evden yürüyen yolcular karşı durakta otobüse ya da taksiye biner.',
+      }),
+      h('li', {
+        text: 'Sabah ve akşam iş saatlerinde trafik artar, gece azalır. 3. haftadan sonra maç günü, yağmur ve yol çalışması gibi olaylar olur.',
+      }),
+      h('li', {
         text: 'Suyun üstünde ara sıra bir martı uçar: üstüne dokunursan +2 yol parçası kazanırsın.',
       }),
     ),
@@ -328,6 +384,8 @@ const UPGRADE_ICONS: Record<string, string> = {
   bridges: 'bridge',
   boulevards: 'boulevard',
   lights: 'light',
+  roundabouts: 'roundabout',
+  lines: 'ferry',
 };
 
 /** Weekly reward: two cards, one must be chosen (the game waits until then). */
@@ -447,6 +505,8 @@ export function pauseMenu(host: HTMLElement, a: PauseActions): Modal {
 export interface GameOverActions {
   again: () => void;
   otherDistrict: () => void;
+  /** Shares the result (shown for the daily map). */
+  share?: () => void;
 }
 
 export function gameOverDialog(
@@ -490,6 +550,7 @@ export function gameOverDialog(
     h(
       'div',
       { class: 'dialog-actions' },
+      ...(a.share ? [button('Paylaş', () => a.share?.(), { className: 'pill', id: 'btn-share' })] : []),
       button(
         'Başka ilçe',
         () => {

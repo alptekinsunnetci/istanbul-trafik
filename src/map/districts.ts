@@ -235,7 +235,7 @@ export const DISTRICTS: readonly District[] = [
     name: 'Şişli',
     tagline: 'Mecidiyeköy’ün plazaları, Nişantaşı’nın caddeleri: denizsiz, yoğun bir iş merkezi.',
     difficulty: 'zor',
-    demandMultiplier: 1.2,
+    demandMultiplier: 1.1,
     startRoads: 34,
     neighbourhoods: [
       'Mecidiyeköy',
@@ -341,7 +341,7 @@ export const DISTRICTS: readonly District[] = [
     name: 'Beykoz',
     tagline: 'Anadolu yakasında Boğaz kıyısı, Göksu Deresi ve ormanlarla çevrili köyler.',
     difficulty: 'kolay',
-    demandMultiplier: 0.85,
+    demandMultiplier: 0.8,
     startRoads: 40,
     neighbourhoods: [
       'Anadoluhisarı',

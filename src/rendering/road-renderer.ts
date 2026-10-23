@@ -14,6 +14,9 @@ const MOUTH_RADIUS = 4.5;
 /** Merge / exit lane beside a highway junction: length along the highway and width at the junction. */
 const TAPER_LENGTH = C * 1.3;
 const TAPER_WIDTH = 3.4;
+/** Road ring and green island of a roundabout (m). */
+const ROUNDABOUT_RING = 9.5;
+const ROUNDABOUT_ISLAND = 3.4;
 /** Highways run on past the map edge where they leave the city. */
 const OFF_MAP = C * 40;
 
@@ -197,6 +200,28 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme, graph?: RoadGra
   for (const i of lone) {
     const [x, y] = center(grid, i);
     g.circle(x, y, (grid.lanes[i] === 2 ? BOULEVARD_WIDTH : STREET_WIDTH) / 2).fill(theme.road);
+  }
+
+  // Road works: a striped barrier across the closed street.
+  for (let i = 0; i < grid.size; i++) {
+    if (grid.closed[i] !== 1 || !grid.isRoad(i)) continue;
+    const [x, y] = center(grid, i);
+    const vertical = grid.connected(i, 0) || grid.connected(i, 2);
+    const w = vertical ? 10 : 3;
+    const h = vertical ? 3 : 10;
+    g.roundRect(x - w / 2, y - h / 2, w, h, 1)
+      .fill(0xf28c28)
+      .stroke({ width: 0.8, color: 0xffffff });
+    for (const k of [-1, 1])
+      g.circle(x + (vertical ? k * 4 : 0), y + (vertical ? 0 : k * 4), 1.3).fill(0xffffff);
+  }
+
+  // Roundabouts: a ring of road around a small green island.
+  for (let i = 0; i < grid.size; i++) {
+    if (grid.roundabout[i] !== 1 || !grid.isRoad(i)) continue;
+    const [x, y] = center(grid, i);
+    g.circle(x, y, ROUNDABOUT_RING).fill(theme.road);
+    g.circle(x, y, ROUNDABOUT_ISLAND).fill(theme.park).stroke({ width: 1.2, color: theme.marking });
   }
 
   // One-way arrows.

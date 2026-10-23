@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Building } from '../../src/core/world-state';
 import { type Pose, buildLanePath, centerline, diagonalRuns, poseOnPath } from '../../src/map/geometry';
 import type { Dir } from '../../src/map/grid';
-import { UNLIMITED, buildRoad, normalizeStroke } from '../../src/map/road-editor';
+import { UNLIMITED, buildRoad, eraseRoad, normalizeStroke } from '../../src/map/road-editor';
 import { buildGraph } from '../../src/map/topology';
 import { addBuilding, addTrip, makeSim, runFor, testGrid } from '../helpers';
 
@@ -97,5 +97,16 @@ describe('diagonal roads', () => {
     expect(sim.vehicles).toHaveLength(1);
     const after = where();
     expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeLessThan(6);
+  });
+
+  it('a diagonal step costs one road piece, and erasing gives back exactly what was paid', () => {
+    const g = testGrid(20, 20);
+    const stroke = normalizeStroke(g, [g.idx(2, 2), g.idx(12, 12)]);
+    const r = buildRoad(g, stroke, UNLIMITED);
+    // 10 diagonal steps over 21 staircase cells: far fewer pieces than cells.
+    expect(r.spent.roads).toBeLessThanOrEqual(13);
+    expect(r.spent.roads).toBeGreaterThanOrEqual(10);
+    const back = eraseRoad(g, stroke);
+    expect(back.spent.roads).toBe(-r.spent.roads);
   });
 });
