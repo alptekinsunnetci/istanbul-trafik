@@ -14,6 +14,18 @@ yeni renkler eklenir.
 - **Sunucu gerekmez:** Oyun tamamen istemci tarafında çalışır. Statik dosya sunan herhangi bir
   web sunucusu (Nginx) yeterlidir. Harici API, CDN, hesap veya telemetri yoktur.
 
+## Ekran görüntüleri
+
+![Kadıköy: Marmara kıyısında evler tek bir iş yerine bağlanmış](docs/screenshots/kadikoy.png)
+
+| Ana menü                                                    | Fatih: Haliç kıyısı                                             |
+| ----------------------------------------------------------- | --------------------------------------------------------------- |
+| ![İlçe seçimi ve zorluk modları](docs/screenshots/menu.png) | ![Fatih'te Haliç kıyısında yol ağı](docs/screenshots/fatih.png) |
+
+| Beşiktaş: haftalık ödül                                                        |
+| ------------------------------------------------------------------------------ |
+| ![Beşiktaş'ta yeni hafta başlarken ödül seçimi](docs/screenshots/besiktas.png) |
+
 ## Gereksinimler
 
 Önerilen yol **yalnızca Docker** kullanmaktır; ana makineye Node.js kurmanız gerekmez.
