@@ -38,8 +38,12 @@ export class Grid {
   readonly road: Uint8Array;
   readonly links: Uint8Array;
   readonly lanes: Uint8Array;
-  /** Door cells of buildings cannot be removed by the player. */
+  /** Door cells of buildings and highway cells cannot be removed by the player. */
   readonly locked: Uint8Array;
+  /** Pre-built highway cells (faster, cannot be erased or changed). */
+  readonly highway: Uint8Array;
+  /** Traffic light on this cell (only effective where it is a junction). */
+  readonly signal: Uint8Array;
   readonly building: Int32Array;
   /** Incremented on every road change. */
   version = 0;
@@ -57,6 +61,8 @@ export class Grid {
     this.links = new Uint8Array(n);
     this.lanes = new Uint8Array(n);
     this.locked = new Uint8Array(n);
+    this.highway = new Uint8Array(n);
+    this.signal = new Uint8Array(n);
     this.building = new Int32Array(n).fill(-1);
   }
 
@@ -111,6 +117,10 @@ export class Grid {
   setLink(i: number, d: Dir, on: boolean): void {
     const bit = 1 << d;
     this.links[i] = on ? (this.links[i] as number) | bit : (this.links[i] as number) & ~bit;
+  }
+
+  isHighway(i: number): boolean {
+    return this.highway[i] === 1;
   }
 
   isBridge(i: number): boolean {

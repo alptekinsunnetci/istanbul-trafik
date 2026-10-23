@@ -1,8 +1,8 @@
-import { DEMAND, MAP } from '../core/constants';
+import { DEMAND, MAP, THROUGH } from '../core/constants';
 import type { Random } from '../core/random';
 import { BUILDING_TYPES, type Building, type BuildingKind, buildingCells } from '../core/world-state';
 import type { District } from './districts';
-import { DIRS, type Dir, Grid, Terrain } from './grid';
+import { DIRS, type Dir, Grid, Terrain, dirBetween, opposite } from './grid';
 
 export function createDistrictGrid(
   district: District,
@@ -18,7 +18,103 @@ export function createDistrictGrid(
       grid.terrain[grid.idx(x, y)] = district.terrain(tx, ty, width, height);
     }
   }
+  for (const hw of highwayPaths(grid, district)) {
+    const cells = hw.cells.filter((c) => !hw.gateways.includes(c));
+    for (const c of cells) {
+      grid.road[c] = 1;
+      grid.lanes[c] = 2;
+      grid.locked[c] = 1;
+      grid.highway[c] = 1;
+    }
+    for (let k = 1; k < cells.length; k++) {
+      const a = cells[k - 1] as number;
+      const b = cells[k] as number;
+      const d = dirBetween(grid.cx(b) - grid.cx(a), grid.cy(b) - grid.cy(a));
+      if (d === null) continue;
+      grid.setLink(a, d, true);
+      grid.setLink(b, opposite(d), true);
+    }
+  }
   return grid;
+}
+
+export interface HighwayPath {
+  name: string;
+  /** Cells along the highway, in order, including both ends. */
+  cells: number[];
+  /** Ends on the map edge; they hold the gateway buildings, not road. */
+  gateways: number[];
+}
+
+/** The district's highways as cell paths on this grid (authoring coordinates are scaled). */
+export function highwayPaths(grid: Grid, district: District): HighwayPath[] {
+  const sx = grid.width / MAP.defaultWidth;
+  const sy = grid.height / MAP.defaultHeight;
+  const out: HighwayPath[] = [];
+  for (const hw of district.highways) {
+    const pts = hw.path.map(
+      ([x, y]) =>
+        [
+          Math.min(grid.width - 1, Math.round(x * sx)),
+          Math.min(grid.height - 1, Math.round(y * sy)),
+        ] as const,
+    );
+    const cells: number[] = [];
+    for (let k = 0; k < pts.length; k++) {
+      const [x1, y1] = pts[k] as readonly [number, number];
+      if (k === 0) {
+        cells.push(grid.idx(x1, y1));
+        continue;
+      }
+      let [x, y] = pts[k - 1] as readonly [number, number];
+      while (x !== x1 || y !== y1) {
+        if (x !== x1) x += Math.sign(x1 - x);
+        else y += Math.sign(y1 - y);
+        cells.push(grid.idx(x, y));
+      }
+    }
+    const onEdge = (c: number): boolean => {
+      const x = grid.cx(c);
+      const y = grid.cy(c);
+      return x === 0 || y === 0 || x === grid.width - 1 || y === grid.height - 1;
+    };
+    const ends = [cells[0] as number, cells[cells.length - 1] as number];
+    out.push({ name: hw.name, cells, gateways: ends.filter(onEdge) });
+  }
+  return out;
+}
+
+const SIDE_NAMES = ['kuzey', 'doğu', 'güney', 'batı'] as const;
+
+/**
+ * Gateway buildings at the highway ends on the map edge: through traffic
+ * enters and leaves the city there.
+ */
+function placeGateways(grid: Grid, district: District, buildings: Building[]): void {
+  let index = 0;
+  for (const hw of highwayPaths(grid, district)) {
+    for (const g of hw.gateways) {
+      const k = hw.cells.indexOf(g);
+      const door = hw.cells[k === 0 ? 1 : k - 1];
+      if (door === undefined) continue;
+      const doorDir = dirBetween(grid.cx(door) - grid.cx(g), grid.cy(door) - grid.cy(g));
+      if (doorDir === null) continue;
+      // The gateway faces into the city, so it lies on the side opposite to its door.
+      const side = SIDE_NAMES[opposite(doorDir)];
+      const b = makeBuilding(
+        buildings.length,
+        'kapi',
+        index,
+        { x: grid.cx(g), y: grid.cy(g), doorDir, door },
+        `${hw.name} · ${side}`,
+        -1000,
+      );
+      b.pinTimer = THROUGH.firstDelay + index * 1.3;
+      placeBuilding(grid, b);
+      buildings.push(b);
+      index++;
+    }
+  }
 }
 
 export interface Site {
@@ -89,6 +185,8 @@ export interface SiteSearch {
   attempts?: number;
   /** Keep the footprint and its door inside this rectangle (inclusive cells). */
   bounds?: Bounds;
+  /** Extra condition on the top-left cell of the footprint. */
+  accept?: (x: number, y: number) => boolean;
 }
 
 export function findSite(
@@ -116,6 +214,7 @@ export function findSite(
       if (!inside) continue;
     }
     if (door < 0) continue;
+    if (search.accept && !search.accept(x, y)) continue;
     const tooClose = buildings.some((b) => {
       const gapX = Math.max(0, Math.max(b.x - (x + BUILDING_TYPES[kind].w), x - (b.x + b.w)));
       const gapY = Math.max(0, Math.max(b.y - (y + BUILDING_TYPES[kind].h), y - (b.y + b.h)));
@@ -127,9 +226,36 @@ export function findSite(
   return null;
 }
 
+/**
+ * Numbers the separate pieces of dry ground (4-connected land and park
+ * cells); water cells get -1. Two cells with different numbers can only be
+ * joined by a bridge.
+ */
+export function landRegions(grid: Grid): Int32Array {
+  const region = new Int32Array(grid.size).fill(-1);
+  let next = 0;
+  for (let start = 0; start < grid.size; start++) {
+    if (region[start] !== -1 || grid.terrain[start] === Terrain.Water) continue;
+    const stack = [start];
+    region[start] = next;
+    while (stack.length > 0) {
+      const c = stack.pop() as number;
+      for (const d of DIRS) {
+        const n = grid.neighbor(c, d);
+        if (n < 0 || region[n] !== -1 || grid.terrain[n] === Terrain.Water) continue;
+        region[n] = next;
+        stack.push(n);
+      }
+    }
+    next++;
+  }
+  return region;
+}
+
 const NAME_SUFFIXES: Record<BuildingKind, readonly string[]> = {
   konut: ['Evleri', 'Sitesi', 'Apartmanı', 'Konakları', 'Lojmanları'],
   ticari: ['Çarşısı', 'Pasajı', 'İş Merkezi', 'Pazarı', 'Ofisleri'],
+  kapi: ['Bağlantısı'],
 };
 
 export function buildingName(
@@ -193,7 +319,8 @@ const START_HOUSES = 4;
 
 /**
  * Starts the city with one workplace of the first colour near the district
- * centre and a few houses around it, leaving room for several routes.
+ * centre and a few houses around it, leaving room for several routes. The
+ * gateways of the district's highways come last.
  */
 export function generateInitialBuildings(
   grid: Grid,
@@ -233,5 +360,6 @@ export function generateInitialBuildings(
   const work = place('ticari', center, 0, 4);
   const anchor: [number, number] = work ? [work.x + 1, work.y + 1] : center;
   for (let i = 0; i < START_HOUSES; i++) place('konut', anchor, 5, 9);
+  placeGateways(grid, district, buildings);
   return buildings;
 }

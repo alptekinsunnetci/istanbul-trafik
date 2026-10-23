@@ -22,7 +22,7 @@ const GAME_MODES: readonly GameMode[] = ['rahat', 'normal', 'zor'];
 
 export const SETTINGS_VERSION = 1;
 export const RECORDS_VERSION = 1;
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export type ReduceMotion = 'system' | 'on' | 'off';
 
@@ -148,7 +148,7 @@ export interface SavedGame {
   demandReassign: number;
   nextVehicleId: number;
   nextTripId: number;
-  grid: { road: string; links: string; lanes: string; locked: string };
+  grid: { road: string; links: string; lanes: string; locked: string; signal: string };
   buildings: Building[];
   vehicles: Vehicle[];
   trailing: TrailingHold[];
@@ -156,7 +156,7 @@ export interface SavedGame {
   junctionDelay: [string, number][];
 }
 
-const RESOURCE_KINDS: readonly ResourceKind[] = ['roads', 'bridges', 'boulevards'];
+const RESOURCE_KINDS: readonly ResourceKind[] = ['roads', 'bridges', 'boulevards', 'lights'];
 
 function parseBounds(raw: unknown, width: number, height: number): Bounds {
   const o = obj(raw, 'bounds');
@@ -176,6 +176,7 @@ function parseResources(raw: unknown, p: string): Resources {
     roads: int(o.roads, `${p}.roads`, 0, 1_000_000),
     bridges: int(o.bridges, `${p}.bridges`, 0, 1_000_000),
     boulevards: int(o.boulevards, `${p}.boulevards`, 0, 1_000_000),
+    lights: int(o.lights, `${p}.lights`, 0, 1_000_000),
   };
 }
 
@@ -199,7 +200,7 @@ const VEHICLE_STATES: readonly VehicleState[] = [
   'noRoute',
 ];
 const KINDS = Object.keys(VEHICLE_TYPES) as VehicleKind[];
-const BUILDING_KINDS: readonly BuildingKind[] = ['konut', 'ticari'];
+const BUILDING_KINDS: readonly BuildingKind[] = ['konut', 'ticari', 'kapi'];
 
 function dir(v: unknown, p: string): Dir {
   return int(v, p, 0, 3) as Dir;
@@ -396,6 +397,7 @@ export function parseSavedGame(raw: unknown): SavedGame {
       links: str(grid.links, 'grid.links', cells * 2),
       lanes: str(grid.lanes, 'grid.lanes', cells * 2),
       locked: str(grid.locked, 'grid.locked', cells * 2),
+      signal: str(grid.signal, 'grid.signal', cells * 2),
     },
     buildings: arr(o.buildings, 'buildings', 500).map((b, i) => parseBuilding(b, `buildings[${i}]`, cells)),
     vehicles: arr(o.vehicles, 'vehicles', 2000).map((v, i) => parseVehicle(v, `vehicles[${i}]`)),

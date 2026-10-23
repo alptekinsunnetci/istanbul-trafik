@@ -4,8 +4,8 @@ import type { GameSession } from '../gameplay/game-session';
 import type { PreviewCell } from '../map/road-editor';
 import { drawBuildingStatus, drawBuildings } from './building-renderer';
 import { Camera } from './camera';
-import { drawGridlocks, drawHover, drawPreview, drawSelection, drawTraffic } from './effects';
-import { drawTerrain, placeLabels } from './map-renderer';
+import { drawGridlocks, drawHover, drawPreview, drawSelection, drawSignals, drawTraffic } from './effects';
+import { drawTerrain, placeHighwaySigns, placeLabels } from './map-renderer';
 import { drawRoads } from './road-renderer';
 import { DEFAULT_THEME, HIGH_CONTRAST_THEME, type Theme, districtTheme, groupColor } from './theme';
 import { PathCache, VehicleRenderer } from './vehicle-renderer';
@@ -30,6 +30,7 @@ export class Renderer {
   private readonly terrain = new Graphics();
   private readonly labels = new Container();
   private readonly roads = new Graphics();
+  private readonly signs = new Container();
   private readonly traffic = new Graphics();
   private readonly buildings = new Graphics();
   private readonly status = new Graphics();
@@ -37,6 +38,7 @@ export class Renderer {
   private readonly hover = new Graphics();
   private readonly selection = new Graphics();
   private readonly gridlocks = new Graphics();
+  private readonly lights = new Graphics();
   private readonly outside = new Graphics();
   private readonly hint = new Graphics();
   private readonly popups = new Container();
@@ -71,11 +73,13 @@ export class Renderer {
       this.terrain,
       this.labels,
       this.roads,
+      this.signs,
       this.traffic,
       this.buildings,
       this.status,
       this.outside,
       this.vehicles.container,
+      this.lights,
       this.selection,
       this.gridlocks,
       this.hint,
@@ -147,6 +151,7 @@ export class Renderer {
         this.status,
         this.selection,
         this.gridlocks,
+        this.lights,
       ])
         g.clear();
       this.clearLabels();
@@ -206,11 +211,43 @@ export class Renderer {
   boundsChanged(): void {
     this.drawOutside();
     this.drawLabels();
+    this.drawSigns();
     this.fitBounds(true);
   }
 
   private clearLabels(): void {
     for (const t of this.labels.removeChildren()) t.destroy();
+    for (const t of this.signs.removeChildren()) t.destroy({ children: true });
+  }
+
+  /** Name signs on the highways (green: otoyol, blue: devlet yolu, dark: street). */
+  private drawSigns(): void {
+    for (const t of this.signs.removeChildren()) t.destroy({ children: true });
+    const s = this.session;
+    if (!s) return;
+    for (const p of placeHighwaySigns(s.sim.grid, s.district, s.bounds)) {
+      const color = p.text.startsWith('O-')
+        ? this.theme.signOtoyol
+        : p.text.startsWith('D-')
+          ? this.theme.signDevlet
+          : this.theme.signStreet;
+      const text = new Text({
+        text: p.text,
+        style: { fontFamily: 'system-ui, sans-serif', fontSize: 6, fontWeight: '800', fill: 0xffffff },
+        resolution: 4,
+      });
+      text.anchor.set(0.5);
+      const w = text.width + 6;
+      const h = 9;
+      const badge = new Graphics()
+        .roundRect(-w / 2, -h / 2, w, h, 2.5)
+        .fill(color)
+        .stroke({ width: 1, color: 0xffffff });
+      const sign = new Container();
+      sign.addChild(badge, text);
+      sign.position.set(p.x, p.y);
+      this.signs.addChild(sign);
+    }
   }
 
   /** Istanbul place names on the water and in parks of the playable area. */
@@ -365,6 +402,7 @@ export class Renderer {
     if (!s || !this.paths) return;
     this.paths.clear();
     drawRoads(this.roads, s.sim.grid, this.theme);
+    this.drawSigns();
     drawBuildings(this.buildings, s.sim.buildings, s.sim.grid.width, this.theme);
     this.overlayTimer = 0;
   }
@@ -374,9 +412,11 @@ export class Renderer {
     const s = this.session;
     if (!s || !this.paths) return;
     const theme = this.theme;
-    this.vehicles.capture(s.sim.vehicles, s.sim.graph, this.paths, (v) =>
-      groupColor(theme, s.sim.buildingById(v.destination)?.color ?? 0),
-    );
+    this.vehicles.capture(s.sim.vehicles, s.sim.graph, this.paths, (v) => {
+      // Highway traffic is grey: it belongs to no colour group.
+      if (s.sim.highwayTrip(v)) return theme.through;
+      return groupColor(theme, s.sim.buildingById(v.destination)?.color ?? 0);
+    });
   }
 
   setPreview(cells: readonly PreviewCell[] | null, erase: boolean): void {
@@ -422,6 +462,7 @@ export class Renderer {
         else this.traffic.clear();
       }
       drawGridlocks(this.gridlocks, s.sim, this.theme, pulse);
+      drawSignals(this.lights, s.sim, this.theme);
       this.drawHint(pulse);
       drawSelection(
         this.selection,

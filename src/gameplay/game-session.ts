@@ -23,6 +23,7 @@ import {
   findSite,
   generateInitialBuildings,
   inBounds,
+  landRegions,
   makeBuilding,
   placeBuilding,
 } from '../map/map-generator';
@@ -36,6 +37,7 @@ import {
   previewBuild,
   previewErase,
   setBoulevard,
+  toggleSignal,
   smoothStroke,
   toggleOneWay,
 } from '../map/road-editor';
@@ -46,7 +48,7 @@ import { ScoreKeeper } from './scoring';
 
 export type SessionPhase = 'ready' | 'running' | 'over';
 
-export type EditTool = 'road' | 'boulevard' | 'oneway' | 'erase';
+export type EditTool = 'road' | 'boulevard' | 'oneway' | 'erase' | 'signal';
 
 export type Orientation = 'wide' | 'tall';
 
@@ -83,6 +85,7 @@ interface RoadSnapshot {
   links: Uint8Array;
   lanes: Uint8Array;
   locked: Uint8Array;
+  signal: Uint8Array;
   /** Entrance cell and side of every building at snapshot time. */
   doors: Map<number, [number, Dir]>;
   resources: Resources;
@@ -136,6 +139,10 @@ export class GameSession {
   pendingUpgrades: Upgrade[] | null = null;
   summary: GameSummary | null = null;
   private undoStack: RoadSnapshot[] = [];
+  /** Separate pieces of dry ground; buildings on different pieces need a bridge. */
+  private readonly regions: Int32Array;
+  /** Districts without water never offer bridges. */
+  readonly hasWater: boolean;
   private unsubscribers: (() => void)[] = [];
 
   constructor(init: SessionInit) {
@@ -155,6 +162,8 @@ export class GameSession {
       this.orientation,
     );
     const buildings = generateInitialBuildings(grid, district, mapRng, this.bounds);
+    this.regions = landRegions(grid);
+    this.hasWater = grid.terrain.some((t) => t === Terrain.Water);
     this.growthRng = new Random(hashString(`growth:${district.id}:${this.seed}`));
     this.sim = new Simulation(grid, buildings, {
       seed: this.seed,
@@ -163,8 +172,9 @@ export class GameSession {
     });
     this.resources = {
       roads: district.startRoads,
-      bridges: ECONOMY.startBridges,
+      bridges: this.hasWater ? ECONOMY.startBridges : 0,
       boulevards: ECONOMY.startBoulevards,
+      lights: ECONOMY.startLights,
     };
     this.unsubscribers.push(this.sim.events.on('tripCompleted', () => this.score.onCompleted()));
   }
@@ -207,7 +217,7 @@ export class GameSession {
     if (GROWTH.newColorWeeks.includes(week) && this.colors < GROWTH.maxColors) {
       this.introduceColor();
     }
-    const pool = [...UPGRADES];
+    const pool = UPGRADES.filter((u) => this.hasWater || u.kind !== 'bridges');
     const first = pool.splice(this.growthRng.int(0, pool.length - 1), 1)[0] as Upgrade;
     const second = pool[this.growthRng.int(0, pool.length - 1)] as Upgrade;
     this.pendingUpgrades = [first, second];
@@ -250,9 +260,11 @@ export class GameSession {
     around: [number, number],
     minR: number,
     maxR: number,
+    accept?: (x: number, y: number) => boolean,
   ): Building | null {
     const sim = this.sim;
     const b0 = this.bounds;
+    const extra = accept ? { accept } : {};
     const site =
       findSite(sim.grid, sim.buildings, kind, this.growthRng, {
         center: around,
@@ -260,6 +272,7 @@ export class GameSession {
         maxRadius: maxR,
         minDistance: 2,
         bounds: b0,
+        ...extra,
       }) ??
       findSite(sim.grid, sim.buildings, kind, this.growthRng, {
         center: [(b0.x0 + b0.x1) / 2, (b0.y0 + b0.y1) / 2],
@@ -268,6 +281,7 @@ export class GameSession {
         minDistance: 2,
         attempts: 200,
         bounds: b0,
+        ...extra,
       });
     if (!site) return null;
     const used = new Set(sim.buildings.map((b) => b.name));
@@ -313,7 +327,10 @@ export class GameSession {
       const color = this.growthRng.int(0, this.colors - 1);
       const sameColor = workplaces.filter((w) => w.color === color);
       const anchor = this.growthRng.pick(sameColor.length > 0 ? sameColor : workplaces);
-      b = this.addBuilding('ticari', color, [anchor.x, anchor.y], 6, 12);
+      const across = this.growthRng.next() < GROWTH.acrossWaterWorkplace ? this.acrossWater(anchor) : null;
+      b =
+        (across && this.addBuilding('ticari', color, [anchor.x, anchor.y], 6, 14, across)) ||
+        this.addBuilding('ticari', color, [anchor.x, anchor.y], 6, 12);
     } else {
       // A house for the colour that is most short of houses relative to its pins.
       let bestColor = 0;
@@ -329,13 +346,38 @@ export class GameSession {
           bestColor = color;
         }
       }
-      const sameColor = sim.buildings.filter((x) => x.color === bestColor);
-      const anchor = this.growthRng.pick(sameColor.length > 0 ? sameColor : sim.buildings);
-      b = this.addBuilding('konut', bestColor, [anchor.x, anchor.y], 3, 8);
+      const city = sim.buildings.filter((x) => x.kind !== 'kapi');
+      const sameColor = city.filter((x) => x.color === bestColor);
+      const anchor = this.growthRng.pick(sameColor.length > 0 ? sameColor : city);
+      const across = this.growthRng.next() < GROWTH.acrossWaterHouse ? this.acrossWater(anchor) : null;
+      b =
+        (across && this.addBuilding('konut', bestColor, [anchor.x, anchor.y], 3, 12, across)) ||
+        this.addBuilding('konut', bestColor, [anchor.x, anchor.y], 3, 8);
     }
     if (!b) return;
     this.settle();
     this.events.emit('buildingAdded', b.id);
+  }
+
+  /**
+   * A site condition for "on the other side of the water" from a building,
+   * or null when the playable area has only one piece of dry ground.
+   */
+  private acrossWater(from: Building): ((x: number, y: number) => boolean) | null {
+    const g = this.sim.grid;
+    const own = this.regions[g.idx(from.x, from.y)];
+    const b = this.bounds;
+    let other = false;
+    for (let y = b.y0; y <= b.y1 && !other; y++)
+      for (let x = b.x0; x <= b.x1 && !other; x++) {
+        const r = this.regions[g.idx(x, y)] as number;
+        if (r >= 0 && r !== own) other = true;
+      }
+    if (!other) return null;
+    return (x, y) => {
+      const r = this.regions[g.idx(x, y)] as number;
+      return r >= 0 && r !== own;
+    };
   }
 
   finish(reason: string): void {
@@ -388,6 +430,8 @@ export class GameSession {
       for (const c of raw) {
         if (c < 0) continue;
         const bid = grid.building[c] as number;
+        // Gateways at the map edge are not something to connect to.
+        if (bid >= 0 && this.sim.buildingById(bid)?.kind === 'kapi') continue;
         if (bid < 0) {
           outside.push(c);
           continue;
@@ -488,7 +532,11 @@ export class GameSession {
     let p: StrokePreview;
     if (tool === 'road') p = previewBuild(grid, stroke, this.resources);
     else if (tool === 'erase') p = previewErase(grid, stroke);
-    else p = { cells: stroke.map((c) => ({ cell: c, valid: grid.isRoad(c) })), spent: noResources() };
+    else if (tool === 'signal') {
+      const c = stroke[0];
+      const ok = c !== undefined && grid.isRoad(c) && (grid.signal[c] === 1 || grid.degree(c) >= 3);
+      p = { cells: c === undefined ? [] : [{ cell: c, valid: ok }], spent: noResources() };
+    } else p = { cells: stroke.map((c) => ({ cell: c, valid: grid.isRoad(c) })), spent: noResources() };
     if (clipped && !p.message) p.message = 'Şehrin sınırına ulaştın';
     return p;
   }
@@ -521,6 +569,9 @@ export class GameSession {
       case 'oneway':
         result = toggleOneWay(grid, stroke);
         break;
+      case 'signal':
+        result = toggleSignal(grid, stroke, this.resources);
+        break;
     }
     if (clipped && result.ok && tool === 'road') {
       result = { ...result, ok: false, message: 'Şehrin sınırına ulaştın' };
@@ -529,6 +580,7 @@ export class GameSession {
       this.resources.roads -= result.spent.roads;
       this.resources.bridges -= result.spent.bridges;
       this.resources.boulevards -= result.spent.boulevards;
+      this.resources.lights -= result.spent.lights;
       this.commitEdit(before);
       if (rotated && result.changed === 0) result = { ...result, changed: 1 };
     }
@@ -554,6 +606,7 @@ export class GameSession {
     g.links.set(snap.links);
     g.lanes.set(snap.lanes);
     g.locked.set(snap.locked);
+    g.signal.set(snap.signal);
     for (const b of this.sim.buildings) {
       const door = snap.doors.get(b.id);
       if (door) {
@@ -581,6 +634,7 @@ export class GameSession {
       links: g.links.slice(),
       lanes: g.lanes.slice(),
       locked: g.locked.slice(),
+      signal: g.signal.slice(),
       doors: new Map(this.sim.buildings.map((b) => [b.id, [b.door, b.doorDir] as [number, Dir]])),
       resources: { ...this.resources },
     };

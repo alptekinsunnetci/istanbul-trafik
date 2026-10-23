@@ -37,7 +37,10 @@ function districtPreview(d: District): HTMLImageElement {
         [Terrain.Park]: hex(d.palette.park),
       };
       for (let i = 0; i < grid.size; i++) {
-        ctx.fillStyle = colors[grid.terrain[i] as number] ?? hex(d.palette.land);
+        // Highways show as dark lines over land and water.
+        ctx.fillStyle = grid.isHighway(i)
+          ? '#58616f'
+          : (colors[grid.terrain[i] as number] ?? hex(d.palette.land));
         ctx.fillRect(grid.cx(i), grid.cy(i), 1, 1);
       }
     }
@@ -267,6 +270,7 @@ export function helpContent(): HTMLElement {
     ['Binadan sürükle', 'Yol çiz: binadan başla, diğer binada bitir (su üstünde otomatik köprü)'],
     ['Geri al (Ctrl+Z)', 'Son çizimi geri al, parçalar geri gelir'],
     ['Sil ya da sağ tık + sürükle', 'Yolu sil (parçalar geri gelir)'],
+    ['Işık, sonra kavşağa dokun', 'Trafik ışığı koy / kaldır (4)'],
     ['Araca / binaya dokun', 'Ayrıntıları gör'],
     ['Tekerlek, + / −', 'Yakınlaştır / uzaklaştır'],
     ['Orta tık + sürükle, W A S D', 'Haritayı kaydır'],
@@ -301,12 +305,26 @@ export function helpContent(): HTMLElement {
       h('li', {
         text: 'Tıkanan yerlerde ikinci bir yol aç ya da bulvar kullan: bulvarlar iki şeritli ve daha hızlıdır.',
       }),
+      h('li', {
+        text: 'Işıksız kavşakta karşı yönden araç gelirse sürücüler yavaşlayıp yol verir. Kalabalık bir kavşağa trafik ışığı koy: yönler sırayla yeşil yanar.',
+      }),
+      h('li', {
+        text: 'D-100, O-1 gibi hazır otoyollar hızlıdır ve silinemez; üstlerinden şehir dışına giden gri araçlar akar. Yolunu otoyola bağlayabilirsin ama oluşan kavşak geçen trafiği de yavaşlatır.',
+      }),
+      h('li', {
+        text: 'Dere, Haliç ya da Boğaz’ın karşı kıyısında da binalar çıkar: oraya köprüyle ulaşırsın.',
+      }),
     ),
     table,
   );
 }
 
-const UPGRADE_ICONS: Record<string, string> = { roads: 'road', bridges: 'bridge', boulevards: 'boulevard' };
+const UPGRADE_ICONS: Record<string, string> = {
+  roads: 'road',
+  bridges: 'bridge',
+  boulevards: 'boulevard',
+  lights: 'light',
+};
 
 /** Weekly reward: two cards, one must be chosen (the game waits until then). */
 export function upgradeDialog(

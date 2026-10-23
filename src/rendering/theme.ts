@@ -22,6 +22,15 @@ export interface Theme {
   parkEdge: number;
   grid: number;
   road: number;
+  /** Pre-built highways: a wider road with white edges and a dashed centre line (same asphalt as streets, so junctions merge cleanly). */
+  highway: number;
+  highwayEdge: number;
+  /** Cars of through traffic (they belong to no colour group). */
+  through: number;
+  /** Road signs with highway names: otoyol (green), devlet yolu (blue), street. */
+  signOtoyol: number;
+  signDevlet: number;
+  signStreet: number;
   bridgeEdge: number;
   marking: number;
   glyph: number;
@@ -57,6 +66,12 @@ export const DEFAULT_THEME: Theme = {
   parkEdge: 0xb2d3a7,
   grid: 0xe6d9c6,
   road: 0x434b59,
+  highway: 0x434b59,
+  highwayEdge: 0xffffff,
+  through: 0xa7adb6,
+  signOtoyol: 0x2e8a57,
+  signDevlet: 0x2f6fb0,
+  signStreet: 0x434b59,
   bridgeEdge: 0x2f3540,
   marking: 0xffffff,
   glyph: 0xffffff,
@@ -85,6 +100,8 @@ export const HIGH_CONTRAST_THEME: Theme = {
   park: 0xa9cf94,
   parkEdge: 0x93bf7c,
   road: 0x1f1f1f,
+  highway: 0x1f1f1f,
+  through: 0x7a7a7a,
   waterDeep: 0x4f88b5,
   waterDot: 0x7fb1d6,
   waterLabel: 0x1f4f78,

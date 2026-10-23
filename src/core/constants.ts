@@ -34,6 +34,8 @@ export const ROAD = {
   streetSpeed: 13.9,
   /** 70 km/h */
   boulevardSpeed: 19.4,
+  /** 90 km/h on the pre-built highways (E-5, O-1, …). */
+  highwaySpeed: 25,
   /** Turning speed inside a junction. */
   turnSpeed: 7,
   /** Nominal saturation flow per lane, vehicles per hour. */
@@ -73,6 +75,26 @@ export const JUNCTION = {
   starvationTime: 6,
   /** Vehicles standing still this long at a junction are considered stuck. */
   stuckTime: 12,
+  /**
+   * Give way at junctions without lights: when traffic approaches on the
+   * crossing road (within `yieldWatch` metres), a car may only enter after
+   * slowing to `yieldSpeed` within `yieldDistance` of the stop line.
+   */
+  yieldWatch: 30,
+  yieldDistance: 5,
+  yieldSpeed: 3,
+} as const;
+
+/**
+ * Traffic lights (demand-actuated, two phases: north–south and east–west).
+ * A green phase lasts at least `minGreen`; it ends early when its direction
+ * has nobody waiting but the other one does, and at the latest after
+ * `maxGreen`. Between phases the junction is all-red until the box is clear.
+ */
+export const SIGNAL = {
+  minGreen: 4,
+  maxGreen: 14,
+  clearance: 1.5,
 } as const;
 
 export const ROUTING = {
@@ -128,6 +150,30 @@ export const DEMAND = {
   newBuildingGrace: 8,
   /** Pending trips of unreachable houses are moved to reachable ones this often. */
   reassignInterval: 2,
+} as const;
+
+/**
+ * Through traffic: cars that enter the map at one end of a highway and leave
+ * at another. They score nothing but load the roads they use.
+ */
+export const THROUGH = {
+  /** Seconds between cars entering at one gateway at minute 0... */
+  interval: 7,
+  /** ...shrinking by this much per simulated minute down to the minimum. */
+  decayPerMinute: 0.25,
+  intervalMin: 3.5,
+  /** A gateway never queues more cars than this; extra cars are simply dropped. */
+  maxPending: 3,
+  /**
+   * Share of highway cars that come into the city (to a house or workplace
+   * the highway can reach) and of cars that leave the city from a connected
+   * workplace onto the highway. The rest only pass through.
+   */
+  inboundShare: 0.25,
+  outboundShare: 0.2,
+  /** A workplace queues at most this many cars that leave the city. */
+  maxOutboundPerWorkplace: 2,
+  firstDelay: 3,
 } as const;
 
 export type GameMode = 'rahat' | 'normal' | 'zor';
@@ -193,6 +239,9 @@ export const GROWTH = {
   maxColors: 5,
   /** A new colour is introduced at the start of these weeks. */
   newColorWeeks: [2, 4, 6, 9] as readonly number[],
+  /** Chance that a new house / workplace appears across the water, so bridges are needed. */
+  acrossWaterHouse: 0.3,
+  acrossWaterWorkplace: 0.45,
 } as const;
 
 export const ECONOMY = {
@@ -202,15 +251,17 @@ export const ECONOMY = {
   weeklyRoads: 20,
   startBridges: 4,
   startBoulevards: 0,
+  startLights: 2,
 } as const;
 
-export type ResourceKind = 'roads' | 'bridges' | 'boulevards';
+export type ResourceKind = 'roads' | 'bridges' | 'boulevards' | 'lights';
 
 /** Weekly reward options; two are offered at random each week. */
 export const UPGRADES: readonly { kind: ResourceKind; amount: number; label: string; text: string }[] = [
   { kind: 'roads', amount: 15, label: '+15 yol', text: 'Daha fazla yol parçası' },
   { kind: 'bridges', amount: 5, label: '+5 köprü', text: 'Suyun üstünden geçmek için' },
   { kind: 'boulevards', amount: 10, label: '+10 bulvar', text: 'İki şeritli, hızlı yollar' },
+  { kind: 'lights', amount: 2, label: '+2 trafik ışığı', text: 'Kalabalık kavşakları sırayla akıt' },
 ];
 
 /** A trip is "on time" if travel time ≤ freeFlow × factor + slack (statistics only). */ export const TRIP = {

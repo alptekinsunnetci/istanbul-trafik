@@ -56,6 +56,7 @@ export class StatsPanel {
     rowsTo(this.dl, [
       ['Toplam üretilen araç', formatNumber(s.spawned)],
       ['Tamamlanan yolculuk', formatNumber(s.completed)],
+      ['Şehirden geçen araç', formatNumber(sim.throughCompleted)],
       ['Yarıda kalan araç', formatNumber(s.failed)],
       ['Aktif araç', formatNumber(sim.vehicles.length)],
       ['Bekleyen yolculuk', formatNumber(sim.totalPending())],
@@ -135,6 +136,14 @@ export class Inspector {
     if (!b) return false;
     this.root.hidden = false;
     this.title.textContent = b.name;
+    if (b.kind === 'kapi') {
+      rowsTo(this.dl, [
+        ['Tür', BUILDING_TYPES[b.kind].label],
+        ['Şehre girmeyi bekleyen', formatNumber(b.pending.length)],
+        ['Buradan çıkan araç', formatNumber(b.completed)],
+      ]);
+      return true;
+    }
     rowsTo(this.dl, [
       ['Tür', BUILDING_TYPES[b.kind].label],
       ['Bekleyen araç', formatNumber(b.pending.length)],

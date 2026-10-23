@@ -99,10 +99,11 @@ describe('maps', () => {
       const g = s.sim.grid;
       expect(s.sim.buildings.length, d.name).toBeGreaterThanOrEqual(4);
       expect(s.sim.buildings.filter((b) => b.kind === 'ticari')).toHaveLength(1);
-      expect(s.sim.buildings.every((b) => b.color === 0)).toBe(true);
-      expect(s.sim.buildings.some((b) => b.kind === 'konut')).toBe(true);
-      expect(s.sim.buildings.some((b) => b.kind !== 'konut')).toBe(true);
-      for (const b of s.sim.buildings) {
+      // Gateways (where highways leave the map) are not part of the city.
+      const city = s.sim.buildings.filter((b) => b.kind !== 'kapi');
+      expect(city.every((b) => b.color === 0)).toBe(true);
+      expect(city.some((b) => b.kind === 'konut')).toBe(true);
+      for (const b of city) {
         for (const c of buildingCells(b, g.width)) expect(g.terrain[c]).toBe(Terrain.Land);
         expect(g.locked[b.door]).toBe(1);
         expect(s.sim.graph.node(b.door)).toBeDefined();

@@ -1,8 +1,8 @@
 import type { Graphics } from 'pixi.js';
 import { GEOM, MAP } from '../core/constants';
-import type { MapLabel } from '../map/districts';
+import type { District, MapLabel } from '../map/districts';
 import { type Grid, Terrain, type TerrainType } from '../map/grid';
-import { type Bounds, inBounds } from '../map/map-generator';
+import { type Bounds, highwayPaths, inBounds } from '../map/map-generator';
 import type { Theme } from './theme';
 
 const C = GEOM.cellSize;
@@ -245,6 +245,46 @@ export function placeLabels(grid: Grid, labels: readonly MapLabel[], bounds: Bou
       x: (best[0] + 0.5) * C,
       y: (best[1] + 0.5) * C,
     });
+  }
+  return out;
+}
+
+export interface PlacedSign {
+  text: string;
+  /** Centre in world metres. */
+  x: number;
+  y: number;
+}
+
+/**
+ * One name sign per highway, on a straight stretch on land (so it never
+ * covers a water name) without junctions inside the playable area, as close
+ * to its centre as possible.
+ */
+export function placeHighwaySigns(grid: Grid, district: District, bounds: Bounds): PlacedSign[] {
+  const out: PlacedSign[] = [];
+  const cx = (bounds.x0 + bounds.x1) / 2;
+  const cy = (bounds.y0 + bounds.y1) / 2;
+  for (const hw of highwayPaths(grid, district)) {
+    let best = -1;
+    let bestD = Infinity;
+    for (let k = 2; k < hw.cells.length - 2; k++) {
+      const c = hw.cells[k] as number;
+      const x = grid.cx(c);
+      const y = grid.cy(c);
+      if (x <= bounds.x0 || x >= bounds.x1 || y <= bounds.y0 || y >= bounds.y1) continue;
+      const a = hw.cells[k - 1] as number;
+      const b = hw.cells[k + 1] as number;
+      const straight = grid.cx(a) === grid.cx(b) || grid.cy(a) === grid.cy(b);
+      if (!straight || [a, c, b].some((n) => grid.degree(n) !== 2 || grid.isBridge(n))) continue;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    if (best < 0) continue;
+    out.push({ text: hw.name, x: (grid.cx(best) + 0.5) * C, y: (grid.cy(best) + 0.5) * C });
   }
   return out;
 }

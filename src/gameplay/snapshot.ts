@@ -40,6 +40,7 @@ export function toSnapshot(session: GameSession, now: Date = new Date()): SavedG
       links: bytesToBase64(g.links),
       lanes: bytesToBase64(g.lanes),
       locked: bytesToBase64(g.locked),
+      signal: bytesToBase64(g.signal),
     },
     buildings: clone(sim.buildings),
     vehicles: clone(sim.vehicles),
@@ -80,15 +81,19 @@ function applySnapshot(session: GameSession, save: SavedGame): void {
   g.links.set(base64ToBytes(save.grid.links, n, 'grid.links'));
   g.lanes.set(base64ToBytes(save.grid.lanes, n, 'grid.lanes'));
   g.locked.set(base64ToBytes(save.grid.locked, n, 'grid.locked'));
+  g.signal.set(base64ToBytes(save.grid.signal, n, 'grid.signal'));
   g.building.fill(-1);
 
   // Sanitise the road layer: links only between road cells, valid lane counts.
   for (let i = 0; i < n; i++) {
+    if (g.isHighway(i) && (g.road[i] !== 1 || g.lanes[i] !== 2 || g.locked[i] !== 1))
+      throw new Error('Kayıt: otoyol eksik');
     if (g.road[i] !== 1) {
       g.road[i] = 0;
       g.links[i] = 0;
       g.lanes[i] = 0;
       g.locked[i] = 0;
+      g.signal[i] = 0;
       continue;
     }
     if (g.terrain[i] === Terrain.Park) throw new Error('Kayıt: park üzerinde yol');
@@ -104,8 +109,9 @@ function applySnapshot(session: GameSession, save: SavedGame): void {
     ids.add(b.id);
     if (b.x + b.w > g.width || b.y + b.h > g.height) throw new Error('Kayıt: bina harita dışında');
     for (const c of buildingCells(b, g.width)) {
-      if (g.terrain[c] !== Terrain.Land || g.isRoad(c) || g.building[c] !== -1)
-        throw new Error('Kayıt: geçersiz bina konumu');
+      // Gateways sit where a highway leaves the map, which may be over water (a bridge).
+      const groundOk = b.kind === 'kapi' || g.terrain[c] === Terrain.Land;
+      if (!groundOk || g.isRoad(c) || g.building[c] !== -1) throw new Error('Kayıt: geçersiz bina konumu');
       g.building[c] = b.id;
     }
     if (!g.isRoad(b.door) || g.locked[b.door] !== 1) throw new Error('Kayıt: bina girişi eksik');

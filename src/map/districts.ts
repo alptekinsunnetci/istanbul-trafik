@@ -19,6 +19,16 @@ export interface MapLabel {
   vertical?: boolean;
 }
 
+/**
+ * A pre-built highway, as an axis-aligned polyline in 64×64 authoring cells.
+ * An end on the map edge becomes a gateway where through traffic enters and
+ * leaves the city.
+ */
+export interface Highway {
+  name: string;
+  path: readonly (readonly [number, number])[];
+}
+
 export interface District {
   id: string;
   name: string;
@@ -36,6 +46,7 @@ export interface District {
   /** Soft ground, water and park tint of the district's map. */
   palette: DistrictPalette;
   labels: readonly MapLabel[];
+  highways: readonly Highway[];
 }
 
 function inRect(x: number, y: number, x0: number, y0: number, x1: number, y1: number): boolean {
@@ -78,19 +89,32 @@ export const DISTRICTS: readonly District[] = [
       'Fikirtepe',
       'Sahrayıcedit',
     ],
-    center: [13, 31],
+    center: [14, 29],
     palette: { land: 0xf4e7d6, water: 0x93c8da, park: 0xc2dcae },
     labels: [
       { text: 'MARMARA DENİZİ', x: 3, y: 26, kind: 'water', vertical: true },
       { text: 'KALAMIŞ', x: 13, y: 47, kind: 'water' },
-      { text: 'YOĞURTÇU', x: 22.5, y: 21.5, kind: 'park' },
+      { text: 'YOĞURTÇU', x: 25.5, y: 20.5, kind: 'park' },
       { text: 'GÖZTEPE', x: 45, y: 44, kind: 'park' },
+    ],
+    highways: [
+      {
+        name: 'D-100',
+        path: [
+          [12, 0],
+          [12, 24],
+          [63, 24],
+        ],
+      },
     ],
     terrain(x, y) {
       const coast = 7 + 3 * Math.sin(y / 9) + (y > 40 ? (y - 40) * 0.22 : 0);
       if (x < coast) return Terrain.Water;
-      if (inEllipse(x, y, 13, 47, 5, 4)) return Terrain.Water; // Kalamış koyu
-      if (inRect(x, y, 21, 20, 24, 23)) return Terrain.Park; // Yoğurtçu
+      if (inEllipse(x, y, 12, 47, 6.5, 4)) return Terrain.Water; // Kalamış koyu, open to the sea
+      // Kurbağalıdere: comes down from Koşuyolu and flows into Kalamış.
+      const dere = 30 - 0.35 * y + 2 * Math.sin(y / 5);
+      if (y < 46 && Math.abs(x - dere) < 1.5) return Terrain.Water;
+      if (inRect(x, y, 24, 19, 27, 22)) return Terrain.Park; // Yoğurtçu, beside the stream
       if (inEllipse(x, y, 45, 44, 3, 3)) return Terrain.Park; // Göztepe
       return Terrain.Land;
     },
@@ -127,10 +151,20 @@ export const DISTRICTS: readonly District[] = [
     center: [48, 32],
     palette: { land: 0xebedee, water: 0x8bbcd8, park: 0xbcd9b6 },
     labels: [
-      { text: 'İSTANBUL BOĞAZI', x: 60, y: 30, kind: 'water', vertical: true },
+      { text: 'İSTANBUL BOĞAZI', x: 58, y: 34, kind: 'water', vertical: true },
       { text: 'YILDIZ PARKI', x: 41, y: 33.5, kind: 'park' },
     ],
+    highways: [
+      {
+        name: 'O-1',
+        path: [
+          [0, 27],
+          [63, 27],
+        ],
+      },
+    ],
     terrain(x, y) {
+      if (x > 60) return Terrain.Land; // Anadolu yakası: Beylerbeyi
       const coast = 55 - 3 * Math.sin(y / 8) - y * 0.06;
       if (x > coast) return Terrain.Water;
       if (inRect(x, y, 38, 30, 44, 37)) return Terrain.Park; // Yıldız Parkı
@@ -174,6 +208,15 @@ export const DISTRICTS: readonly District[] = [
       { text: 'VALİDEBAĞ', x: 32, y: 40, kind: 'park' },
       { text: 'FETHİ PAŞA', x: 17.5, y: 10.5, kind: 'park', vertical: true },
     ],
+    highways: [
+      {
+        name: 'O-1',
+        path: [
+          [0, 26],
+          [63, 26],
+        ],
+      },
+    ],
     terrain(x, y) {
       const coast = 8 + 4 * Math.sin(y / 7) + (y < 20 ? (20 - y) * 0.3 : 0);
       if (x < coast) return Terrain.Water;
@@ -211,16 +254,28 @@ export const DISTRICTS: readonly District[] = [
       'Cibali',
       'Mercan',
     ],
-    center: [32, 13],
+    center: [32, 14],
     palette: { land: 0xf3e3d0, water: 0x8ec0d8, park: 0xc4dcae },
     labels: [
-      { text: 'HALİÇ', x: 28, y: 4, kind: 'water' },
+      { text: 'HALİÇ', x: 28, y: 12.5, kind: 'water' },
       { text: 'MARMARA DENİZİ', x: 28, y: 60, kind: 'water' },
       { text: 'GÜLHANE', x: 53, y: 25, kind: 'park' },
     ],
+    highways: [
+      {
+        name: 'ATATÜRK BLV.',
+        path: [
+          [26, 0],
+          [26, 30],
+          [0, 30],
+        ],
+      },
+    ],
     terrain(x, y) {
-      const halic = 9 + 2 * Math.sin(x / 6) + (x > 38 ? (x - 38) * 0.28 : 0);
-      if (y < halic) return Terrain.Water;
+      // Haliç: a channel with the Beyoğlu shore on the far side, opening into the Boğaz.
+      const halic = 14 + 1.5 * Math.sin(x / 6);
+      const open = x > 44 ? x - 44 : 0;
+      if (y < halic + 2.2 + open * 0.3 && y > halic - 2.2 - open * 0.6) return Terrain.Water;
       const marmara = 55 - 2 * Math.sin(x / 7) - (x > 44 ? (x - 44) * 0.2 : 0);
       if (y > marmara) return Terrain.Water;
       if (x > 60) return Terrain.Water; // Boğaz girişi
@@ -260,6 +315,22 @@ export const DISTRICTS: readonly District[] = [
     center: [32, 30],
     palette: { land: 0xece8ef, water: 0x9cc6dc, park: 0xbad8b0 },
     labels: [{ text: 'MAÇKA', x: 47.5, y: 49.5, kind: 'park' }],
+    highways: [
+      {
+        name: 'D-100',
+        path: [
+          [0, 28],
+          [63, 28],
+        ],
+      },
+      {
+        name: 'BÜYÜKDERE CD.',
+        path: [
+          [36, 0],
+          [36, 28],
+        ],
+      },
+    ],
     terrain(x, y) {
       if (inRect(x, y, 44, 46, 51, 53)) return Terrain.Park;
       if (inRect(x, y, 14, 18, 17, 21)) return Terrain.Park;
@@ -299,9 +370,20 @@ export const DISTRICTS: readonly District[] = [
       { text: 'MARMARA DENİZİ', x: 32, y: 59, kind: 'water' },
       { text: 'BOTANİK PARKI', x: 29, y: 40.5, kind: 'park' },
     ],
+    highways: [
+      {
+        name: 'D-100',
+        path: [
+          [0, 44],
+          [63, 44],
+        ],
+      },
+    ],
     terrain(x, y) {
       const coast = 52 + 3 * Math.sin(x / 10);
       if (y > coast) return Terrain.Water;
+      // Ayamama Deresi reaches the sea here.
+      if (Math.abs(x - (36.5 + 1.5 * Math.sin(y / 4))) < 1.5) return Terrain.Water;
       if (inRect(x, y, 26, 38, 32, 43)) return Terrain.Park; // Botanik Parkı
       return Terrain.Land;
     },

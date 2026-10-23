@@ -39,13 +39,10 @@ export function drawGlyph(g: Graphics, group: number, x: number, y: number, r: n
  * houses are small cubes, workplaces large blocks standing on a rounded pad
  * of their own colour. Both carry the colour and the glyph of their group.
  */
-export function drawBuildings(
-  g: Graphics,
-  buildings: readonly Building[],
-  gridWidth: number,
-  theme: Theme,
-): void {
+export function drawBuildings(g: Graphics, all: readonly Building[], gridWidth: number, theme: Theme): void {
   g.clear();
+  // Gateways are drawn as the highway leaving the map, not as buildings.
+  const buildings = all.filter(isCityBuilding);
   // Pads under workplaces: their whole 2×2 lot, tinted with the group colour.
   for (const b of buildings) {
     if (b.kind !== 'ticari') continue;
@@ -62,7 +59,7 @@ export function drawBuildings(
   // Shadows next so that no shadow falls on a neighbouring building.
   for (const b of buildings) {
     const { x, y, s } = footprint(b);
-    const d = SHADOW[b.kind];
+    const d = b.kind === 'konut' ? SHADOW.konut : SHADOW.ticari;
     g.poly([
       x + s,
       y + 2,
@@ -106,6 +103,10 @@ export function drawBuildings(
   }
 }
 
+function isCityBuilding(b: Building): boolean {
+  return b.kind !== 'kapi';
+}
+
 /** Visible block of a building inside its footprint. */
 function footprint(b: Building): { x: number; y: number; s: number } {
   const w = b.w * C;
@@ -125,6 +126,7 @@ export function drawBuildingStatus(
 ): void {
   g.clear();
   for (const b of buildings) {
+    if (!isCityBuilding(b)) continue;
     const x = b.x * C;
     const y = b.y * C;
     const w = b.w * C;

@@ -5,10 +5,10 @@ import { type Dir, type Grid, Terrain, dirBetween, opposite } from './grid';
 export type Resources = Record<ResourceKind, number>;
 
 export function noResources(): Resources {
-  return { roads: 0, bridges: 0, boulevards: 0 };
+  return { roads: 0, bridges: 0, boulevards: 0, lights: 0 };
 }
 
-export const UNLIMITED: Resources = { roads: 1e9, bridges: 1e9, boulevards: 1e9 };
+export const UNLIMITED: Resources = { roads: 1e9, bridges: 1e9, boulevards: 1e9, lights: 1e9 };
 
 export interface EditResult {
   ok: boolean;
@@ -33,6 +33,7 @@ export interface StrokePreview {
 export function cellPieces(grid: Grid, i: number): Resources {
   const r = noResources();
   if (!grid.isRoad(i) || grid.locked[i] === 1) return r;
+  if (grid.signal[i] === 1) r.lights = 1;
   if (grid.isBridge(i)) r.bridges = 1;
   else r.roads = 1;
   if (grid.lanes[i] === 2) r.boulevards = 1;
@@ -43,6 +44,7 @@ function addTo(a: Resources, b: Resources, sign = 1): void {
   a.roads += sign * b.roads;
   a.bridges += sign * b.bridges;
   a.boulevards += sign * b.boulevards;
+  a.lights += sign * b.lights;
 }
 
 /**
@@ -200,10 +202,12 @@ export function eraseRoad(grid: Grid, stroke: readonly number[]): EditResult {
   const spent = noResources();
   let changed = 0;
   let lockedHit = false;
+  let highwayHit = false;
   for (const c of new Set(stroke)) {
     if (!grid.isRoad(c)) continue;
     if (grid.locked[c] === 1) {
       lockedHit = true;
+      if (grid.isHighway(c)) highwayHit = true;
       continue;
     }
     addTo(spent, cellPieces(grid, c), -1);
@@ -214,11 +218,12 @@ export function eraseRoad(grid: Grid, stroke: readonly number[]): EditResult {
     grid.links[c] = 0;
     grid.road[c] = 0;
     grid.lanes[c] = 0;
+    grid.signal[c] = 0;
     changed++;
   }
   if (changed > 0) grid.touch();
   const result: EditResult = { ok: changed > 0, spent, changed };
-  if (lockedHit) result.message = 'Bina girişleri silinemez';
+  if (lockedHit) result.message = highwayHit ? 'Otoyol silinemez' : 'Bina girişleri silinemez';
   else if (changed === 0) result.message = 'Silinecek yol yok';
   return result;
 }
@@ -228,7 +233,8 @@ export function eraseRoad(grid: Grid, stroke: readonly number[]): EditResult {
  * or downgrades them if the stroke starts on a boulevard.
  */
 export function setBoulevard(grid: Grid, stroke: readonly number[], budget: Resources): EditResult {
-  const roads = [...new Set(stroke)].filter((c) => grid.isRoad(c));
+  // Highways keep their lanes.
+  const roads = [...new Set(stroke)].filter((c) => grid.isRoad(c) && !grid.isHighway(c));
   const spent = noResources();
   if (roads.length === 0)
     return { ok: false, spent, changed: 0, message: 'Bulvarı mevcut bir yolun üstüne çizin' };
@@ -269,7 +275,8 @@ export function toggleOneWay(grid: Grid, stroke: readonly number[]): EditResult 
     const a = stroke[k - 1] as number;
     const b = stroke[k] as number;
     const d = stepDir(grid, a, b);
-    if (d !== null && grid.connected(a, d)) pairs.push({ a, b, d });
+    if (d !== null && grid.connected(a, d) && !(grid.isHighway(a) && grid.isHighway(b)))
+      pairs.push({ a, b, d });
   }
   if (pairs.length === 0) {
     return {
@@ -291,4 +298,28 @@ export function toggleOneWay(grid: Grid, stroke: readonly number[]): EditResult 
     changed: pairs.length,
     message: alreadyOneWay ? 'Çift yön' : 'Tek yön',
   };
+}
+
+/**
+ * Puts a traffic light on a junction (a road cell with three or more arms),
+ * or takes it away again, returning the piece.
+ */
+export function toggleSignal(grid: Grid, stroke: readonly number[], budget: Resources): EditResult {
+  const spent = noResources();
+  const c = stroke[0];
+  if (c === undefined || !grid.isRoad(c))
+    return { ok: false, spent, changed: 0, message: 'Trafik ışığını bir kavşağa koyun' };
+  if (grid.signal[c] === 1) {
+    grid.signal[c] = 0;
+    spent.lights = -1;
+    grid.touch();
+    return { ok: true, spent, changed: 1, message: 'Trafik ışığı kaldırıldı' };
+  }
+  if (grid.degree(c) < 3)
+    return { ok: false, spent, changed: 0, message: 'Trafik ışığı yalnızca kavşağa konur' };
+  if (budget.lights < 1) return { ok: false, spent, changed: 0, message: 'Trafik ışığı kalmadı' };
+  grid.signal[c] = 1;
+  spent.lights = 1;
+  grid.touch();
+  return { ok: true, spent, changed: 1 };
 }

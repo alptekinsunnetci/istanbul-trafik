@@ -82,7 +82,16 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
 - **Kilitlenme tespiti:** Durma çizgisinde, çıkış şeridinde yer bekleyen lider araçlardan bir
   "bekleme grafiği" kurulur. Döngüler kilitlenme olarak raporlanır ve haritada işaretlenir. Araçlar
   ışınlanmaz; uzun bekleyenler alternatif rota arar.
-- Sıralama politikası `JunctionPolicy` arayüzüyle değiştirilebilir (ör. ileride trafik ışığı).
+- Sıralama politikası `JunctionPolicy` arayüzüyle değiştirilebilir.
+- **Yol verme:** Işıksız ve en az üç kollu bir kavşakta, çapraz yoldan 30 m içinde araç varsa (ya da
+  kutuda çapraz yönden bir araç varsa) araç ancak durma çizgisine 5 m kala ve 3 m/sn altına yavaşlayınca
+  rezervasyon isteyebilir (`JUNCTION.yield*`). Çapraz trafik yoksa hızını korur.
+- **Trafik ışığı** (`grid.signal`, `SIGNAL`): Talebe duyarlı iki fazlı ışık. Kuzey–güney ve doğu–batı
+  yönleri sırayla yeşil yanar. Yeşil en az 4 sn sürer; o yönde bekleyen yoksa ve diğer yönde varsa erken,
+  en geç 14 sn sonra biter. Fazlar arasında kutu boşalana kadar (en az 1,5 sn) her yön kırmızıdır.
+  Dedektör olarak o adımın rezervasyon istekleri kullanılır. Kırmızıdaki istekler hiç değerlendirilmez
+  (başkasını da engellemez). Yoğun dört yönlü bir kavşakta ölçüm: 100 araç ışıksız 274 sn, ışıklı 232 sn
+  (testte ışığın daha hızlı olduğu doğrulanır).
 
 ## Rota motoru
 
@@ -113,7 +122,16 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
 - **Parçalar:** yol / köprü / bulvar parçaları sayılabilir kaynaklardır; silinen hücrenin parçası iade edilir.
   Haftada (90 sn) +20 yol gelir ve iki ödülden biri seçilir; seçim yapılana kadar oturum adım atmaz.
 - **Büyüme:** 25. saniyeden itibaren 30→16 sn aralıklarla yeni bina (her 5. olay iş yeri). Ev, raptiye/ev
-  oranı en yüksek renge eklenir. 2., 4., 6. ve 9. haftalarda yeni bir renk grubu (iş yeri + iki ev) gelir.
+  oranı en yüksek renge eklenir. 2., 4., 6. ve 9. haftalarda yeni bir renk grubu (iş yeri + ev) gelir.
+  Oyun alanında birden fazla kara parçası varsa (`landRegions`), yeni evlerin %30'u ve iş yerlerinin
+  %45'i bağlı olduğu binanın karşı kıyısına konur; böylece köprüler gerçekten gerekir.
+- **Otoyollar ve şehir dışı:** İlçe tanımındaki `highways` çoklu çizgileri haritaya hazır, kilitli, iki
+  şeritli ve 25 m/sn'lik yollar olarak işlenir (`grid.highway`). Harita kenarındaki uçlara `kapi`
+  türünde görünmez "şehir dışı bağlantısı" binaları konur. Her kapı 7→3,5 sn aralıklarla bir araç
+  üretir: çoğu başka bir kapıya gider, %25'i otoyoldan ulaşılabilen bir ev ya da iş yerine girer,
+  %20'si de bağlı bir iş yerinden bu kapıya çıkar. Bu araçlar (`isHighwayTrip`) skor, raptiye, taşma ve
+  oyuncu istatistiklerine sayılmaz; otoyol tıkalıyken giremeyen araçlar birikmez, düşer.
+- **Köprü olmayan ilçe:** Suyu olmayan haritada köprü parçası verilmez ve ödül olarak çıkmaz.
 
 ## Kolaylık ve erişilebilirlik
 
@@ -139,8 +157,9 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
 
 - `toSnapshot` türetilmiş verileri (grafik, şerit listeleri, önbellekler) kaydetmez. Izgara katmanları
   base64, binalar/araçlar/istatistikler düz JSON olarak tutulur. Format `SAVE_VERSION` ile sürümlüdür.
-  Sürüm 2 renk eşleşmeli kurallara aittir; sürüm 1 (asfalt/memnuniyet) kayıtları yüklenmez, oyuncuya
-  bildirilip silinir.
+  Güncel sürüm 4'tür: otoyollar, şehir dışı kapıları, trafik ışıkları (`grid.signal`) ve ışık parçaları
+  da kaydedilir. Sürüm 1–3 kayıtları (eski kurallar ya da nehirsiz/otoyolsuz haritalar) yüklenmez;
+  oyuncuya bildirilip silinir.
 - Yükleme iki aşamalıdır. Önce yapısal doğrulama yapılır (tipler, aralıklar, boyut sınırları); ardından
   ilçe yeniden üretilip anlamsal tutarlılık kontrol edilir (bina yerleşimi, kapılar, araç kenarları,
   rota/konum uyumu). Hata olursa kayıt silinir ve oyuncu bilgilendirilir. Geri yüklenen oyun,

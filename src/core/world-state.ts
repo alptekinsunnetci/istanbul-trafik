@@ -1,7 +1,11 @@
 import type { Dir } from '../map/grid';
 
-/** Houses send cars; workplaces receive them. Both carry a colour group. */
-export type BuildingKind = 'konut' | 'ticari';
+/**
+ * Houses send cars; workplaces receive them. Both carry a colour group.
+ * Gateways (`kapi`) sit at the map edge where a highway leaves the city;
+ * they send and receive through traffic, and their `color` is only an index.
+ */
+export type BuildingKind = 'konut' | 'ticari' | 'kapi';
 
 export interface BuildingType {
   w: number;
@@ -12,6 +16,7 @@ export interface BuildingType {
 export const BUILDING_TYPES: Record<BuildingKind, BuildingType> = {
   konut: { w: 1, h: 1, label: 'Ev' },
   ticari: { w: 2, h: 2, label: 'İş yeri' },
+  kapi: { w: 1, h: 1, label: 'Şehir dışı bağlantısı' },
 };
 
 /** Names of the colour groups, in the order they are introduced. */
@@ -51,6 +56,14 @@ export interface Building {
   pinTimer: number;
   /** Workplaces: overflow timer as a fraction 0..1; the game is lost when it is full. */
   overflow: number;
+}
+
+/**
+ * Highway traffic (to, from or through a gateway): it uses the roads but is
+ * not one of the player's trips, so it never counts for pins or the score.
+ */
+export function isHighwayTrip(origin: Building | undefined, destination: Building | undefined): boolean {
+  return origin?.kind === 'kapi' || destination?.kind === 'kapi';
 }
 
 export function buildingCells(b: Pick<Building, 'x' | 'y' | 'w' | 'h'>, width: number): number[] {

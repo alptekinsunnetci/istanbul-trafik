@@ -119,18 +119,29 @@ npm run test:e2e
 | Binadan başlayıp diğer binaya sürükle      | Yol çiz; uçlar binaların girişine yapışır          |
 | Geri al düğmesi, `Ctrl+Z`                  | Son çizimi geri al, parçalar geri gelir            |
 | Sil düğmesi ya da sağ tık + sürükle        | Yolu sil, parçalar geri gelir                      |
+| Işık düğmesi, sonra kavşağa dokun          | Trafik ışığı koy; tekrar dokununca kalkar          |
 | Araca veya binaya dokunma                  | Ayrıntıları göster                                 |
 | Tekerlek, `+` / `−`, iki parmakla kıstırma | Yakınlaştır / uzaklaştır                           |
 | Orta tık + sürükle, `W A S D`, iki parmak  | Haritayı kaydır                                    |
 | `Boşluk`                                   | Duraklat / devam                                   |
-| `1` · `2` · `3`                            | Yol · Bulvar · Silgi                               |
+| `1` · `2` · `3` · `4`                      | Yol · Bulvar · Silgi · Trafik ışığı                |
 | `T` · `I` · `F`                            | Trafik katmanı · İstatistikler · Haritayı sığdır   |
 | `Esc` veya ←                               | Menü (istatistik, yeniden başlat, ayarlar, yardım) |
 
 - **Parçalar:** Her kara hücresi 1 yol parçası, her su hücresi 1 köprü parçası kullanır. Bulvar
   (iki şeritli, hızlı yol) mevcut yolun üstüne çizilir ve hücre başına 1 bulvar parçası kullanır.
-- Her hafta (90 sn) +20 yol parçası gelir ve iki ödülden biri seçilir (+15 yol, +5 köprü, +10 bulvar).
-  Oyun seçim yapılana kadar bekler.
+- Her hafta (90 sn) +20 yol parçası gelir ve iki ödülden biri seçilir (+15 yol, +5 köprü, +10 bulvar,
+  +2 trafik ışığı). Oyun seçim yapılana kadar bekler. Suyu olmayan ilçede (Şişli) köprü verilmez.
+- **Su ve köprüler:** Kurbağalıdere (Kadıköy), Ayamama Deresi (Bakırköy), Haliç'in karşı kıyısı (Fatih)
+  ve Boğaz'ın Anadolu kıyısı (Beşiktaş) haritayı parçalara ayırır. Şehir büyüdükçe bazı binalar karşı
+  kıyıda çıkar; oraya ancak köprüyle ulaşılır.
+- **Hazır otoyollar:** D-100 (E-5), O-1, Atatürk Bulvarı ve Büyükdere Caddesi haritada hazırdır. Bunlar
+  hızlıdır (90 km/sa) ve silinemez. Harita kenarından gelen gri araçların çoğu şehirden geçip gider; bir
+  kısmı otoyola bağladığın ev ve iş yerlerine girer, bir kısmı da iş yerlerinden çıkıp otoyola katılır.
+  Bu araçlar skora ve raptiyelere sayılmaz, ama yolları doldurur.
+- **Trafik ışığı:** Işıksız kavşakta karşı yönden araç gelirse sürücüler yavaşlayıp yol verir. Işık
+  kuzey–güney ve doğu–batı yönlerine sırayla yeşil yakar; bekleyen olmayan yönde erken döner. 2 ışıkla
+  başlanır; ışık kaldırılınca ya da kavşak silinince parçası geri gelir.
 - **Zorluk:** Rahat (oyun bitmez, sakin tempo), Normal (varsayılan) ve Zor. Seçim hatırlanır; en iyi
   skorlar ilçe ve mod başına ayrı tutulur.
 - **Oynayarak öğren:** Menüdeki rehberli oyun 4 adımda anlatır; saat ilk yol bağlanana kadar bekler.

@@ -10,6 +10,9 @@ interface GameState {
   roads: number;
   edges: number;
   roadPieces: number;
+  lights: number;
+  signals: number;
+  through: number;
   upgradeOpen: boolean;
   mode: string | null;
   canUndo: boolean;
@@ -24,6 +27,7 @@ type Api = {
   state(): GameState;
   doorPath(a: number, b: number): { x: number; y: number }[];
   tutorialPair(): number[];
+  junctions(): { x: number; y: number }[];
   buildingInfo(i: number): { x: number; y: number; doorDir: number; door: number; cellPx: number } | null;
 };
 
@@ -147,7 +151,8 @@ test('draw roads, run traffic, pause, restart', async ({ page }) => {
   const fresh = await state(page);
   // The new game starts immediately (still at 4×), so only check that the clock was reset.
   expect(fresh.time).toBeLessThan(Math.min(15, t0));
-  expect(fresh.vehicles).toBe(0);
+  // Highway cars start rolling right away; none of the player's own cars yet.
+  expect(fresh.spawned).toBe(0);
   expect(fresh.completed).toBe(0);
   expect(fresh.roads).toBe(before.roads);
 });
@@ -349,4 +354,39 @@ test('dragging out of a house on another side turns its entrance', async ({ page
   );
   expect(after!.doorDir).toBe((doorDir + 2) % 4);
   await page.screenshot({ path: 'test-results/screens/11-turned-entrance.png' });
+});
+
+test('a traffic light goes on a junction and comes back off', async ({ page }) => {
+  test.setTimeout(120_000);
+  await startDistrict(page, 'kadikoy', '8');
+  // Two houses into one workplace: their roads meet in a junction.
+  await drawBetween(page, 1, 0);
+  await drawBetween(page, 2, 0);
+  await drawBetween(page, 3, 0);
+  const junctions = await page.evaluate(() =>
+    (window as unknown as { __istanbulTrafik: Api }).__istanbulTrafik.junctions(),
+  );
+  expect(junctions.length).toBeGreaterThan(0);
+  const before = await state(page);
+  expect(before.lights).toBeGreaterThan(0);
+  await page.locator('[data-tool="signal"]').click();
+  await expect(page.locator('[data-tool="signal"]')).toHaveAttribute('aria-pressed', 'true');
+  const j = junctions[0]!;
+  await page.mouse.click(j.x, j.y);
+  await expect.poll(async () => (await state(page)).signals).toBe(1);
+  expect((await state(page)).lights).toBe(before.lights - 1);
+  await expect(page.locator('#lights-value')).toHaveText(String(before.lights - 1));
+  // Tapping again takes the light away and returns it.
+  await page.mouse.click(j.x, j.y);
+  await expect.poll(async () => (await state(page)).signals).toBe(0);
+  expect((await state(page)).lights).toBe(before.lights);
+});
+
+test('through traffic flows on the highway on its own', async ({ page }) => {
+  await startDistrict(page, 'sisli', '3');
+  await page.locator('#btn-speed').click();
+  await page.locator('#btn-speed').click();
+  await expect.poll(async () => (await state(page)).through, { timeout: 40_000 }).toBeGreaterThan(0);
+  // Nothing was connected, so the score is still zero.
+  expect((await state(page)).completed).toBe(0);
 });

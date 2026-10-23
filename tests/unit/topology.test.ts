@@ -97,13 +97,13 @@ describe('topology', () => {
     expect(r.message).toMatch(/Park/);
     expect(g.isRoad(g.idx(5, 5))).toBe(true);
     expect(g.isRoad(g.idx(6, 5))).toBe(false);
-    const poor = buildRoad(g, segment(g, 2, 12, 10, 12), { roads: 3, bridges: 0, boulevards: 0 });
+    const poor = buildRoad(g, segment(g, 2, 12, 10, 12), { roads: 3, bridges: 0, boulevards: 0, lights: 0 });
     expect(poor.ok).toBe(false);
     expect(poor.spent.roads).toBe(3);
     expect(poor.message).toBe('Yol parçası kalmadı');
     // Water cells use bridge pieces instead of road pieces.
     g.terrain[g.idx(4, 16)] = Terrain.Water;
-    const wet = buildRoad(g, segment(g, 2, 16, 6, 16), { roads: 10, bridges: 0, boulevards: 0 });
+    const wet = buildRoad(g, segment(g, 2, 16, 6, 16), { roads: 10, bridges: 0, boulevards: 0, lights: 0 });
     expect(wet.message).toBe('Köprü parçası kalmadı');
     expect(wet.spent.roads).toBe(2);
   });

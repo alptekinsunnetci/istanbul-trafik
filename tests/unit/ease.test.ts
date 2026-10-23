@@ -18,7 +18,8 @@ describe('growing playable area', () => {
     const b = s.bounds;
     expect(b.x1 - b.x0 + 1).toBe(PLAYFIELD.startWidth);
     expect(b.y1 - b.y0 + 1).toBe(PLAYFIELD.startHeight);
-    for (const x of s.sim.buildings) {
+    const city = s.sim.buildings.filter((x) => x.kind !== 'kapi');
+    for (const x of city) {
       expect(inBounds(b, x.x, x.y)).toBe(true);
       expect(inBounds(b, x.x + x.w - 1, x.y + x.h - 1)).toBe(true);
     }
@@ -26,7 +27,7 @@ describe('growing playable area', () => {
     play(s, 95);
     expect(s.week).toBe(2);
     expect(s.bounds.x1 - s.bounds.x0).toBeGreaterThan(b.x1 - b.x0);
-    for (const x of s.sim.buildings) expect(inBounds(s.bounds, x.x, x.y)).toBe(true);
+    for (const x of s.sim.buildings) if (x.kind !== 'kapi') expect(inBounds(s.bounds, x.x, x.y)).toBe(true);
     s.dispose();
   });
 
@@ -125,7 +126,8 @@ describe('portrait screens', () => {
       expect(b.x1 - b.x0 + 1).toBe(PLAYFIELD.startHeight);
       expect(b.y1 - b.y0 + 1).toBe(PLAYFIELD.startWidth);
       expect(s.sim.buildings.length).toBeGreaterThanOrEqual(4);
-      for (const x of s.sim.buildings) expect(inBounds(b, x.x + x.w - 1, x.y + x.h - 1)).toBe(true);
+      for (const x of s.sim.buildings)
+        if (x.kind !== 'kapi') expect(inBounds(b, x.x + x.w - 1, x.y + x.h - 1)).toBe(true);
       s.dispose();
     }
   });

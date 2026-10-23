@@ -1,4 +1,5 @@
-import { JUNCTION } from '../core/constants';
+import { DT, JUNCTION, SIGNAL } from '../core/constants';
+import type { Dir } from '../map/grid';
 import { ZONE_COUNT } from './conflict-zones';
 
 export interface JunctionRequest {
@@ -20,6 +21,23 @@ export interface JunctionRequest {
   wait: number;
   /** Instant movements (spawns) do not keep the zones after the grant. */
   instant: boolean;
+  /** Direction of travel when entering the junction (unset for spawns). */
+  inDir?: Dir;
+}
+
+/** 0: north–south traffic, 1: east–west traffic. */
+export type SignalAxis = 0 | 1;
+
+export interface SignalState {
+  /** Direction that has (or last had) green. */
+  axis: SignalAxis;
+  phase: 'green' | 'clear';
+  /** Seconds in the current phase. */
+  t: number;
+}
+
+export function axisOf(dir: Dir): SignalAxis {
+  return dir === 0 || dir === 2 ? 0 : 1;
 }
 
 /**
@@ -54,6 +72,8 @@ export class JunctionController {
   private held = new Map<number, (ZoneHold | null)[]>();
   private reserved = new Map<number, number>();
   private policy: JunctionPolicy;
+  /** Junctions with a traffic light and their current phase. */
+  private signals = new Map<number, SignalState>();
 
   constructor(policy: JunctionPolicy = longestWaitFirst) {
     this.policy = policy;
@@ -78,13 +98,67 @@ export class JunctionController {
     return this.reserved.get(laneKey) ?? 0;
   }
 
+  /** Sets the junctions that have traffic lights; lights that stay keep their phase. */
+  setSignals(nodes: Iterable<number>): void {
+    const next = new Map<number, SignalState>();
+    for (const n of nodes) next.set(n, this.signals.get(n) ?? { axis: 0, phase: 'green', t: 0 });
+    this.signals = next;
+  }
+
+  signal(node: number): SignalState | undefined {
+    return this.signals.get(node);
+  }
+
+  get signalCount(): number {
+    return this.signals.size;
+  }
+
+  /** Whether a light lets this request enter now. */
+  private allowed(req: JunctionRequest): boolean {
+    const st = this.signals.get(req.node);
+    if (!st) return true;
+    if (st.phase !== 'green') return false;
+    return req.inDir === undefined || axisOf(req.inDir) === st.axis;
+  }
+
+  /** Advances every light by one step, using the requests waiting at it as detectors. */
+  private advanceSignals(requests: readonly JunctionRequest[], dt: number): void {
+    if (this.signals.size === 0) return;
+    const demand = new Map<number, [number, number]>();
+    for (const r of requests) {
+      if (r.inDir === undefined || !this.signals.has(r.node)) continue;
+      const d = demand.get(r.node) ?? [0, 0];
+      d[axisOf(r.inDir)]++;
+      demand.set(r.node, d);
+    }
+    for (const [node, st] of this.signals) {
+      st.t += dt;
+      const d = demand.get(node) ?? [0, 0];
+      const other = (1 - st.axis) as SignalAxis;
+      if (st.phase === 'green') {
+        const waitingOther = d[other] > 0;
+        if (waitingOther && (st.t >= SIGNAL.maxGreen || (st.t >= SIGNAL.minGreen && d[st.axis] === 0))) {
+          st.phase = 'clear';
+          st.t = 0;
+        }
+      } else if (st.t >= SIGNAL.clearance && !this.isBusy(node)) {
+        st.axis = other;
+        st.phase = 'green';
+        st.t = 0;
+      }
+    }
+  }
+
   /** Resolves all requests of a step and returns the granted ones. */
-  resolve(requests: JunctionRequest[]): JunctionRequest[] {
+  resolve(requests: JunctionRequest[], dt: number = DT): JunctionRequest[] {
+    this.advanceSignals(requests, dt);
     if (requests.length === 0) return [];
     const granted: JunctionRequest[] = [];
     const blocked = new Set<number>();
     const instantSpace = new Map<number, number>();
     for (const req of this.policy.order(requests)) {
+      // Red light: wait at the stop line (and do not block anyone else).
+      if (!this.allowed(req)) continue;
       const zonesFree = req.zones.every((z) => {
         if (blocked.has(req.node * ZONE_COUNT + z)) return false;
         const h = this.holder(req.node, z);

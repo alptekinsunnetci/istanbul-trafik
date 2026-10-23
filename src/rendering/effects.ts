@@ -2,7 +2,8 @@ import type { Graphics } from 'pixi.js';
 import { GEOM } from '../core/constants';
 import type { Simulation } from '../core/simulation';
 import { type LanePath, type Pose, poseOnPath } from '../map/geometry';
-import type { Grid } from '../map/grid';
+import { DIRS, DX, DY, type Grid } from '../map/grid';
+import { axisOf } from '../traffic/junction-controller';
 import type { PreviewCell } from '../map/road-editor';
 import type { Theme } from './theme';
 import { type PathCache, vehiclePose } from './vehicle-renderer';
@@ -153,6 +154,28 @@ export function drawGridlocks(g: Graphics, sim: Simulation, theme: Theme, pulse:
       g.rect(node.cx - 0.6, node.cy - 4, 1.2, 4.6)
         .rect(node.cx - 0.6, node.cy + 1.6, 1.2, 1.2)
         .fill(theme.flowCritical);
+    }
+  }
+}
+
+/**
+ * Traffic lights: a lamp on every arm of a signalled junction, green for the
+ * direction that may go, amber while the junction clears, red otherwise.
+ */
+export function drawSignals(g: Graphics, sim: Simulation, theme: Theme): void {
+  g.clear();
+  const grid = sim.grid;
+  for (const [cell, node] of sim.graph.nodes) {
+    const st = sim.junctions.signal(cell);
+    if (!st) continue;
+    g.circle(node.cx, node.cy, 3.2).fill(theme.road).stroke({ width: 1, color: 0xffffff });
+    for (const d of DIRS) {
+      if (!grid.connected(cell, d)) continue;
+      const mine = axisOf(d) === st.axis;
+      const color = !mine ? theme.flowCritical : st.phase === 'green' ? theme.flowGood : theme.flowWarn;
+      g.circle(node.cx + (DX[d] as number) * 8, node.cy + (DY[d] as number) * 8, 2.4)
+        .fill(color)
+        .stroke({ width: 1, color: 0xffffff });
     }
   }
 }

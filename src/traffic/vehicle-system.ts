@@ -10,8 +10,9 @@ import {
   type VehicleKind,
 } from '../core/constants';
 import type { Random } from '../core/random';
-import type { Building, TripFailureReason } from '../core/world-state';
+import { type Building, type TripFailureReason, isHighwayTrip } from '../core/world-state';
 import { curveLength, junctionCurve } from '../map/geometry';
+import type { Grid } from '../map/grid';
 import {
   type GraphEdge,
   type RoadGraph,
@@ -42,6 +43,7 @@ export interface TrailingHold {
 }
 
 export interface TrafficWorld {
+  readonly grid: Grid;
   graph: RoadGraph;
   lanes: LaneManager;
   junctions: JunctionController;
@@ -252,9 +254,54 @@ export class VehicleSystem {
     return last ? last.s - last.length : next.length;
   }
 
+  /**
+   * Directions of travel approaching (or inside) each junction, used for the
+   * give-way rule at junctions without lights.
+   */
+  private approaches(): Map<number, number> {
+    const w = this.w;
+    const near = new Map<number, number>();
+    const mark = (node: number, dir: number): void => {
+      near.set(node, (near.get(node) ?? 0) | (1 << dir));
+    };
+    for (const v of w.vehicles) {
+      if (v.junction) {
+        mark(v.junction.node, v.junction.inDir);
+        continue;
+      }
+      const edge = w.graph.edge(v.edge);
+      if (edge && edge.length - v.s <= JUNCTION.yieldWatch) mark(edge.to, edge.lastDir);
+    }
+    return near;
+  }
+
+  /**
+   * True when a car must slow down and give way before entering this
+   * junction. Where a street joins a highway, the highway has priority: its
+   * cars never yield, while cars from the street give way to any traffic.
+   */
+  private mustYield(edge: GraphEdge, near: Map<number, number>): boolean {
+    const w = this.w;
+    const node = edge.to;
+    if (w.junctions.signal(node)) return false;
+    const n = w.graph.node(node);
+    if (!n || n.degree < 3) return false;
+    const grid = w.grid;
+    const before = edge.cells[edge.cells.length - 2] as number;
+    if (grid.isHighway(node)) {
+      if (grid.isHighway(before)) return false;
+      // From the side street: wait for a gap in the highway traffic.
+      return ((near.get(node) ?? 0) & ~(1 << edge.lastDir)) !== 0;
+    }
+    const inDir = edge.lastDir;
+    const crossing = inDir === 0 || inDir === 2 ? 0b1010 : 0b0101;
+    return ((near.get(node) ?? 0) & crossing) !== 0;
+  }
+
   private collectRequests(): JunctionRequest[] {
     const w = this.w;
     const requests: JunctionRequest[] = [];
+    const near = this.approaches();
     for (const v of w.vehicles) {
       if (v.junction || v.granted || v.laneChange) continue;
       const edge = w.graph.edge(v.edge);
@@ -269,6 +316,9 @@ export class VehicleSystem {
         (v.v * v.v) / (2 * IDM.comfortDecel) + v.v + JUNCTION.requestMargin,
       );
       if (dist > reach) continue;
+      // No light and traffic on the crossing road: slow down and look first.
+      if (this.mustYield(edge, near) && (dist > JUNCTION.yieldDistance || v.v > JUNCTION.yieldSpeed))
+        continue;
       // Prefer reaching a suitable lane first; fall back to any lane at the stop line.
       if (!lanesForTurn(edge.lanes, mv.turn).includes(v.lane) && dist > 8) continue;
       const exitLane = exitLaneFor(mv.turn, v.lane, mv.next.lanes);
@@ -276,6 +326,7 @@ export class VehicleSystem {
         id: v.id,
         node: edge.to,
         zones: zonesFor(edge.lastDir, mv.turn),
+        inDir: edge.lastDir,
         key: movementKey(edge.id, v.lane, mv.next.id, exitLane),
         exitLaneKey: laneKey(mv.next.index, exitLane),
         need: v.length + IDM.minGap,
@@ -385,7 +436,7 @@ export class VehicleSystem {
     if (this.exitAvailable(first, 0) - v.s > 25) v.v = Math.min(SPAWN_SPEED, first.speedLimit);
     w.vehicles.push(v);
     w.lanes.insert(laneKey(first.index, 0), v);
-    dest.incoming++;
+    if (!isHighwayTrip(b, dest)) dest.incoming++;
     w.onSpawn(v);
   }
 
@@ -655,7 +706,10 @@ export class VehicleSystem {
     this.releaseAll(v);
     this.removed.add(v.id);
     const dest = this.buildingIndex.get(v.destination);
-    if (dest) {
+    if (dest && isHighwayTrip(this.buildingIndex.get(v.origin), dest)) {
+      // Only gateways keep count of highway cars (cars that left the city there).
+      if (dest.kind === 'kapi') dest.completed++;
+    } else if (dest) {
       dest.incoming = Math.max(0, dest.incoming - 1);
       dest.completed++;
     }
@@ -668,7 +722,8 @@ export class VehicleSystem {
     this.removed.add(v.id);
     const dest =
       this.buildingIndex.get(v.destination) ?? this.w.buildings.find((b) => b.id === v.destination);
-    if (dest) dest.incoming = Math.max(0, dest.incoming - 1);
+    const origin = this.buildingIndex.get(v.origin) ?? this.w.buildings.find((b) => b.id === v.origin);
+    if (dest && !isHighwayTrip(origin, dest)) dest.incoming = Math.max(0, dest.incoming - 1);
     this.w.onVehicleFail(v, reason);
   }
 

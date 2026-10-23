@@ -3,6 +3,7 @@ import { BUILDING_TYPES, type Building, COLOR_NAMES } from '../core/world-state'
 import { GameSession, type EditTool } from '../gameplay/game-session';
 import { restoreSession, toSnapshot } from '../gameplay/snapshot';
 import { districtById } from '../map/districts';
+import { Terrain } from '../map/grid';
 import { DEFAULT_SETTINGS, type Settings, bestScoreKey } from '../persistence/save-schema';
 import { SaveManager, browserStorage, type WriteResult } from '../persistence/save-manager';
 import { Renderer, UnsupportedRendererError } from '../rendering/renderer';
@@ -35,8 +36,9 @@ const TOOL_LABELS: Record<Tool, string> = {
   road: 'Yol çizimi',
   boulevard: 'Bulvar seçildi: bir yolun üstünden sürükleyin',
   erase: 'Silgi seçildi',
+  signal: 'Trafik ışığı seçildi: bir kavşağa dokunun',
 };
-const KEY_TOOLS: Record<string, Tool> = { '1': 'road', '2': 'boulevard', '3': 'erase' };
+const KEY_TOOLS: Record<string, Tool> = { '1': 'road', '2': 'boulevard', '3': 'erase', '4': 'signal' };
 
 function randomSeed(): number {
   const a = new Uint32Array(1);
@@ -530,6 +532,7 @@ export class GameController {
         s.editable,
         s.resources,
         s.canUndo,
+        s.hasWater,
       );
       this.updateTutorial();
       this.updateBanner(s);
@@ -555,8 +558,9 @@ export class GameController {
       this.tool,
       this.renderer?.trafficOverlay ?? false,
       s?.editable ?? false,
-      s?.resources ?? { roads: 0, bridges: 0, boulevards: 0 },
+      s?.resources ?? { roads: 0, bridges: 0, boulevards: 0, lights: 0 },
       s?.canUndo ?? false,
+      s?.hasWater ?? true,
     );
   }
 
@@ -831,7 +835,7 @@ export class GameController {
     const r = s.edit(tool, stroke);
     if (r.changed > 0) this.sound.play(tool === 'erase' ? 'erase' : 'build');
     // Erasing empty ground is harmless and stays silent.
-    if (!r.ok && r.message && (tool !== 'erase' || r.changed > 0 || r.message.includes('giriş'))) {
+    if (!r.ok && r.message && (tool !== 'erase' || r.changed > 0 || r.message.includes('silinemez'))) {
       this.toasts.show(r.message, 'warning', 2400);
       this.sound.play('invalid');
     }
@@ -860,15 +864,19 @@ export class GameController {
     if (bid >= 0) {
       const b = s.sim.buildingById(bid);
       if (b) {
-        text = `${b.name} · ${COLOR_NAMES[b.color] ?? ''} ${BUILDING_TYPES[b.kind].label.toLocaleLowerCase('tr')}`;
+        text =
+          b.kind === 'kapi'
+            ? `${b.name} · şehir dışına giden otoyol`
+            : `${b.name} · ${COLOR_NAMES[b.color] ?? ''} ${BUILDING_TYPES[b.kind].label.toLocaleLowerCase('tr')}`;
         if (b.kind === 'konut' && b.pending.length > 0) text += ` · ${b.pending.length} araç bekliyor`;
         if (b.kind === 'konut' && b.unreachable && b.pending.length > 0) text += ' · iş yerine yol yok';
       }
     } else if (g.isRoad(cell)) {
       const node = s.sim.graph.node(cell);
       const lanes = g.lanes[cell] === 2 ? 'Bulvar' : 'Yol';
-      text =
-        g.locked[cell] === 1
+      text = g.isHighway(cell)
+        ? `Otoyol${node && node.degree >= 3 ? ` · kavşak (${node.degree} kol)` : ''} · geçen trafik akar`
+        : g.locked[cell] === 1
           ? 'Bina girişi'
           : node && node.degree >= 3
             ? `Kavşak (${node.degree} kol)`
@@ -891,7 +899,8 @@ export class GameController {
   private tap(clientX: number, clientY: number): boolean {
     const s = this.session;
     const r = this.renderer;
-    if (!s || !r || this.tool === 'erase') return false;
+    // With the eraser or the light tool a tap edits instead of inspecting.
+    if (!s || !r || this.tool === 'erase' || this.tool === 'signal') return false;
     const vid = r.pickVehicle(clientX, clientY);
     const cell = r.cellAt(clientX, clientY);
     const bid = vid === null && cell >= 0 ? (s.sim.grid.building[cell] as number) : -1;
@@ -943,6 +952,9 @@ export class GameController {
         roads: this.session ? this.session.sim.grid.road.reduce((a, b) => a + b, 0) : 0,
         edges: this.session?.sim.graph.edges.size ?? 0,
         roadPieces: this.session?.resources.roads ?? 0,
+        lights: this.session?.resources.lights ?? 0,
+        signals: this.session?.sim.junctions.signalCount ?? 0,
+        through: this.session?.sim.throughCompleted ?? 0,
         mode: this.session?.mode ?? null,
         canUndo: this.session?.canUndo ?? false,
         tutorialStep: this.tutorialStep,
@@ -986,14 +998,32 @@ export class GameController {
           cellPx,
         };
       },
+      /** Client coordinates of junctions (three or more arms) built by the player. */
+      junctions: (): { x: number; y: number }[] => {
+        const s = this.session;
+        const r = this.renderer;
+        if (!s || !r) return [];
+        const out: { x: number; y: number }[] = [];
+        for (const [cell, node] of s.sim.graph.nodes)
+          if (node.degree >= 3 && !s.sim.grid.isHighway(cell)) out.push(r.cellToClient(cell));
+        return out;
+      },
       cellSizePx: () => (this.renderer ? this.renderer.camera.scale * GEOM.cellSize : 0),
     };
     (window as unknown as { __istanbulTrafik: typeof api }).__istanbulTrafik = api;
   }
 }
 
-/** Shortest walkable path for test hooks (avoids buildings, parks and other doors). */
+/**
+ * Shortest walkable path for test hooks: avoids buildings, parks and other
+ * entrances; may cross a highway. Land is preferred; water (a bridge) is
+ * used only when there is no dry path.
+ */
 function bfsPath(s: GameSession, from: number, to: number): number[] {
+  return walk(s, from, to, false) ?? walk(s, from, to, true) ?? [];
+}
+
+function walk(s: GameSession, from: number, to: number, water: boolean): number[] | null {
   const g = s.sim.grid;
   const prev = new Int32Array(g.size).fill(-2);
   prev[from] = -1;
@@ -1004,12 +1034,16 @@ function bfsPath(s: GameSession, from: number, to: number): number[] {
     for (const d of [0, 1, 2, 3] as const) {
       const n = g.neighbor(c, d);
       if (n < 0 || prev[n] !== -2) continue;
-      if (n !== to && (g.building[n] !== -1 || g.terrain[n] !== 0 || g.locked[n] === 1)) continue;
+      if (n !== to) {
+        if (g.building[n] !== -1 || g.terrain[n] === Terrain.Park) continue;
+        if (g.terrain[n] === Terrain.Water && !water) continue;
+        if (g.locked[n] === 1 && !g.isHighway(n)) continue;
+      }
       prev[n] = c;
       q.push(n);
     }
   }
-  if (prev[to] === -2) return [];
+  if (prev[to] === -2) return null;
   const out: number[] = [];
   for (let c = to; c !== -1; c = prev[c] as number) out.push(c);
   return out.reverse();

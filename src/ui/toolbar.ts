@@ -2,7 +2,7 @@ import type { Resources } from '../map/road-editor';
 import { formatNumber, h, icon } from './dom';
 
 /** The default action is drawing roads; a badge can arm the boulevard or the eraser. */
-export type Tool = 'road' | 'boulevard' | 'erase';
+export type Tool = 'road' | 'boulevard' | 'erase' | 'signal';
 
 export interface ToolbarActions {
   selectTool(tool: Tool): void;
@@ -56,6 +56,13 @@ export class Toolbar {
     'Bulvar — seç, sonra bir yolun üstünden sürükle',
     'boulevards-value',
   );
+  private lights = badge(
+    'button',
+    'light',
+    'Işık',
+    'Trafik ışığı — seç, sonra bir kavşağa dokun (tekrar dokununca kalkar)',
+    'lights-value',
+  );
   private erase = badge(
     'button',
     'erase',
@@ -72,6 +79,9 @@ export class Toolbar {
     this.boulevards.button.dataset.tool = 'boulevard';
     this.boulevards.button.setAttribute('aria-pressed', 'false');
     this.boulevards.button.addEventListener('click', () => actions.selectTool('boulevard'));
+    this.lights.button.dataset.tool = 'signal';
+    this.lights.button.setAttribute('aria-pressed', 'false');
+    this.lights.button.addEventListener('click', () => actions.selectTool('signal'));
     this.erase.button.dataset.tool = 'erase';
     this.erase.button.setAttribute('aria-pressed', 'false');
     this.erase.button.addEventListener('click', () => actions.selectTool('erase'));
@@ -95,13 +105,21 @@ export class Toolbar {
         this.roads.root,
         this.bridges.root,
         this.boulevards.root,
+        this.lights.root,
         h('span', { class: 'dock-sep', 'aria-hidden': 'true' }),
         this.erase.root,
       ),
     );
   }
 
-  update(tool: Tool, overlay: boolean, editable: boolean, res: Resources, canUndo: boolean): void {
+  update(
+    tool: Tool,
+    overlay: boolean,
+    editable: boolean,
+    res: Resources,
+    canUndo: boolean,
+    water = true,
+  ): void {
     const set = (b: Badge, v: number): void => {
       const text = formatNumber(v);
       if (b.count && b.count.textContent !== text) b.count.textContent = text;
@@ -110,9 +128,16 @@ export class Toolbar {
     set(this.roads, res.roads);
     set(this.bridges, res.bridges);
     set(this.boulevards, res.boulevards);
+    set(this.lights, res.lights);
+    const lt = this.lights.button as HTMLButtonElement;
+    lt.setAttribute('aria-pressed', String(tool === 'signal'));
+    // Lights can always be selected: placed ones can be taken away even with none left.
+    lt.disabled = !editable;
     const bv = this.boulevards.button as HTMLButtonElement;
     bv.setAttribute('aria-pressed', String(tool === 'boulevard'));
     bv.disabled = !editable || (res.boulevards <= 0 && tool !== 'boulevard');
+    // A district without water has no use for bridges.
+    this.bridges.root.hidden = !water;
     // Boulevards appear only once the player owns some.
     this.boulevards.root.hidden = res.boulevards <= 0 && tool !== 'boulevard';
     const er = this.erase.button as HTMLButtonElement;

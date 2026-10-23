@@ -144,7 +144,8 @@ function addEdge(grid: Grid, graph: RoadGraph, cells: number[], dirs: Dir[]): vo
   const steps = cells.length - 1;
   const centerLength = steps * GEOM.cellSize;
   const length = centerLength - 2 * GEOM.junctionRadius;
-  const speedLimit = lanes >= 2 ? ROAD.boulevardSpeed : ROAD.streetSpeed;
+  const highway = interior.length > 0 && interior.every((c) => grid.isHighway(c));
+  const speedLimit = highway ? ROAD.highwaySpeed : lanes >= 2 ? ROAD.boulevardSpeed : ROAD.streetSpeed;
   const edge: GraphEdge = {
     id,
     index: graph.edgeList.length,

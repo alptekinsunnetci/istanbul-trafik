@@ -1,4 +1,4 @@
-import { DEMAND } from '../core/constants';
+import { DEMAND, THROUGH } from '../core/constants';
 import type { Random } from '../core/random';
 import type { Building, TripRequest } from '../core/world-state';
 
@@ -37,6 +37,7 @@ export class DemandGenerator {
 
   update(ctx: DemandContext): TripRequest[] {
     const created: TripRequest[] = [];
+    this.through(ctx, created);
     for (const w of ctx.buildings) {
       if (w.kind !== 'ticari' || !isActive(w, ctx.time)) continue;
       w.pinTimer -= ctx.dt;
@@ -51,6 +52,66 @@ export class DemandGenerator {
       reassign(ctx);
     }
     return created;
+  }
+
+  /** Seconds between through-traffic cars entering at one gateway. */
+  throughInterval(time: number): number {
+    return Math.max(THROUGH.intervalMin, THROUGH.interval - THROUGH.decayPerMinute * (time / 60));
+  }
+
+  /**
+   * Highway traffic. Each gateway regularly sends a car: most pass through
+   * to another gateway, some drive into the city (to any house or workplace
+   * the player has linked to the highway), and some city cars leave from a
+   * linked workplace to this gateway. None of them score or count as pins.
+   * When the highway is jammed, cars that cannot even enter are dropped.
+   */
+  private through(ctx: DemandContext, created: TripRequest[]): void {
+    const gates = ctx.buildings.filter((b) => b.kind === 'kapi');
+    if (gates.length === 0) return;
+    const push = (from: Building, to: Building): void => {
+      const trip: TripRequest = {
+        id: ctx.nextTripId(),
+        origin: from.id,
+        destination: to.id,
+        createdAt: ctx.time,
+      };
+      from.pending.push(trip);
+      created.push(trip);
+    };
+    for (const g of gates) {
+      g.pinTimer -= ctx.dt;
+      if (g.pinTimer > 0) continue;
+      g.pinTimer += this.throughInterval(ctx.time);
+      const roll = ctx.rng.next();
+      if (roll < THROUGH.outboundShare) {
+        // A car from the city heads out onto the highway.
+        const works = ctx.buildings.filter(
+          (w) =>
+            w.kind === 'ticari' &&
+            isActive(w, ctx.time) &&
+            w.pending.length < THROUGH.maxOutboundPerWorkplace &&
+            ctx.reachable(w, g),
+        );
+        if (works.length > 0) {
+          push(ctx.rng.pick(works), g);
+          continue;
+        }
+      }
+      if (g.pending.length >= THROUGH.maxPending) continue;
+      if (roll >= THROUGH.outboundShare && roll < THROUGH.outboundShare + THROUGH.inboundShare) {
+        // A car from outside comes into the city.
+        const city = ctx.buildings.filter(
+          (b) => (b.kind === 'ticari' || b.kind === 'konut') && isActive(b, ctx.time) && ctx.reachable(g, b),
+        );
+        if (city.length > 0) {
+          push(g, ctx.rng.pick(city));
+          continue;
+        }
+      }
+      const targets = gates.filter((o) => o !== g && ctx.reachable(g, o));
+      if (targets.length > 0) push(g, ctx.rng.pick(targets));
+    }
   }
 
   private createPin(w: Building, ctx: DemandContext): TripRequest | null {

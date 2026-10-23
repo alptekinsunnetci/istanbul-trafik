@@ -1,7 +1,7 @@
 import { DEMAND, DT, GEOM, MODES, type ModeRules, ROUTING, STATS, TRIP } from './constants';
 import { EventBus } from './event-bus';
 import { Random } from './random';
-import type { Building, TripFailureReason } from './world-state';
+import { type Building, type TripFailureReason, isHighwayTrip } from './world-state';
 import type { Grid } from '../map/grid';
 import { type GraphEdge, RoadGraph } from '../map/road-graph';
 import { buildGraph } from '../map/topology';
@@ -109,6 +109,8 @@ export class Simulation {
   nextVehicleId = 1;
   nextTripId = 1;
   demandEnabled = true;
+  /** Highway cars that finished their trip (not part of the score or the trip statistics). */
+  throughCompleted = 0;
   gridlocks: GridlockInfo[] = [];
   stats: SimStats = emptyStats();
   private sampleTimer = 0;
@@ -140,6 +142,7 @@ export class Simulation {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const sim = this;
     const world: TrafficWorld = {
+      grid: this.grid,
       get graph() {
         return sim.graph;
       },
@@ -164,7 +167,7 @@ export class Simulation {
       trailing: this.trailing,
       nextVehicleId: () => this.nextVehicleId++,
       onSpawn: (v) => {
-        this.stats.spawned++;
+        if (!this.highwayTrip(v)) this.stats.spawned++;
         this.events.emit('vehicleSpawned', v);
       },
       onArrive: (v) => this.handleArrival(v),
@@ -245,6 +248,10 @@ export class Simulation {
   }
 
   private handleArrival(v: Vehicle): void {
+    if (this.highwayTrip(v)) {
+      this.throughCompleted++;
+      return;
+    }
     const travel = this.time - v.departTime;
     const free = Math.max(v.freeFlowTime, 1);
     const onTime = travel <= free * TRIP.onTimeFactor + TRIP.onTimeSlack;
@@ -262,6 +269,8 @@ export class Simulation {
    * not lost: it goes back to the house's queue and its pin stays visible.
    */
   private handleVehicleFailure(v: Vehicle, reason: TripFailureReason): void {
+    // Highway traffic is not the player's trip: it simply disappears.
+    if (this.highwayTrip(v)) return;
     this.stats.failed++;
     this.stats.failedByReason[reason]++;
     const origin = this.buildingById(v.origin);
@@ -296,6 +305,10 @@ export class Simulation {
     this.graph = next;
     this.queues.resize(next);
     this.junctions.reset();
+    const lights: number[] = [];
+    for (const [cell, node] of next.nodes)
+      if (this.grid.signal[cell] === 1 && node.degree >= 3) lights.push(cell);
+    this.junctions.setSignals(lights);
     this.trailing.clear();
     this.routes.invalidate(changed);
 
@@ -408,6 +421,11 @@ export class Simulation {
     const r = to.to === dest.door ? { edges: [] } : this.system.routeFrom({ edge: to }, dest.door);
     v.route = r ? [pass.fromEdge, to.id, ...r.edges] : [pass.fromEdge, to.id];
     v.routeIndex = 0;
+  }
+
+  /** Whether a vehicle belongs to the highway traffic (to, from or through a gateway). */
+  highwayTrip(v: Vehicle): boolean {
+    return isHighwayTrip(this.buildingById(v.origin), this.buildingById(v.destination));
   }
 
   vehicleById(id: number): Vehicle | undefined {
