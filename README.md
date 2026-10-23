@@ -3,7 +3,13 @@
 İstanbul ilçelerinde yol ağı kurup büyüyen trafiği yönettiğiniz, tarayıcıda çalışan 2D trafik
 simülasyonu ve şehir planlama oyunu.
 
-**▶ Hemen oyna: https://alptekinsunnetci.github.io/istanbul-trafik/**
+> ### ▶ Sadece oynamak mı istiyorsunuz?
+>
+> Hiçbir şey kurmanıza gerek yok, oyun tarayıcıda açılır:
+> **[alptekinsunnetci.github.io/istanbul-trafik](https://alptekinsunnetci.github.io/istanbul-trafik/)**
+>
+> Bilgisayarda ve telefonda çalışır. Aşağıdaki kurulum adımları yalnızca projeyi geliştirmek veya
+> kendi sunucunuzda yayınlamak isteyenler içindir.
 
 Her iş yerinin bir rengi ve sembolü vardır; aynı renkteki evlerden arabalar oraya gider. Oyuncu
 evleri iş yerlerine yolla bağlar. İş yerlerinde bekleyen yolculuklar (raptiyeler) birikir; biri
