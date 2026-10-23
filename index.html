@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      name="description"
+      content="İstanbul Trafik — İstanbul ilçelerinde yol ağı kurup büyüyen trafiği yönettiğiniz tarayıcı oyunu."
+    />
+    <meta name="theme-color" content="#1f2a33" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>İstanbul Trafik</title>
+  </head>
+  <body>
+    <main id="app" data-state="loading">
+      <div class="boot" role="status" aria-live="polite">
+        <span class="boot-mark" aria-hidden="true"></span>
+        <p>İstanbul Trafik yükleniyor…</p>
+      </div>
+    </main>
+    <noscript><p class="boot-error">İstanbul Trafik’i oynamak için JavaScript’i etkinleştirin.</p></noscript>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

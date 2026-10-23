@@ -1,0 +1,43 @@
+{
+  "name": "istanbul-trafik",
+  "version": "1.0.0",
+  "private": true,
+  "description": "İstanbul Trafik — web tabanlı 2D trafik simülasyonu ve şehir planlama oyunu",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "bench": "vitest run --config vitest.bench.config.ts",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test",
+    "build:prod": "npm run check && npm run build",
+    "licenses": "node scripts/licenses.ts"
+  },
+  "dependencies": {
+    "pixi.js": "8.21.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.5",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
+    "prettier": "3.9.9",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.1",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}

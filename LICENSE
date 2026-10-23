@@ -1,0 +1,13 @@
+İstanbul Trafik
+Copyright (c) 2026 İstanbul Trafik proje sahibi. Tüm hakları saklıdır.
+
+Bu yazılımın kaynak kodu, görsel tasarımı ve oyun içi metinleri proje sahibinin
+yazılı izni olmadan kopyalanamaz, değiştirilemez, dağıtılamaz veya ticari amaçla
+kullanılamaz.
+
+Bu depo, kendi lisansları altında dağıtılan üçüncü taraf açık kaynak paketlere
+bağımlıdır. Bu paketlerin listesi ve lisansları docs/THIRD_PARTY_LICENSES.md
+dosyasındadır; söz konusu paketler kendi lisans koşullarına tabidir.
+
+All rights reserved. Third-party packages remain under their own licenses
+(see docs/THIRD_PARTY_LICENSES.md).

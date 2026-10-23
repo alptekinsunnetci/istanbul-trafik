@@ -1,0 +1,7 @@
+dist
+node_modules
+package-lock.json
+playwright-report
+test-results
+coverage
+docs/THIRD_PARTY_LICENSES.md

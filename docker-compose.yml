@@ -1,0 +1,56 @@
+# İstanbul Trafik — Docker Compose
+#
+#   docker compose up -d web                  # üretim imajı → http://localhost:8080
+#   docker compose run --rm dev npm ci        # bağımlılıkları container içinde kur
+#   docker compose up dev                     # Vite geliştirme sunucusu → http://localhost:5173
+#   docker compose run --rm dev npm run check # typecheck + lint + format + test
+#   docker compose run --rm e2e               # Playwright tarayıcı testleri
+#
+# Ana makinede Node.js gerekmez. `dev` ve `e2e` kaynak klasörünü bağlar;
+# node_modules ise Linux'a özgü paketler içerdiği için adlandırılmış bir birimde tutulur.
+
+services:
+  web:
+    build:
+      context: .
+      target: runtime
+    image: istanbul-trafik:latest
+    ports:
+      - '8080:80'
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+
+  dev:
+    image: node:22.23.3-bookworm-slim
+    profiles: ['dev']
+    working_dir: /app
+    command: npm run dev
+    environment:
+      VITE_USE_POLLING: 'true'
+      NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+    ports:
+      - '5173:5173'
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.63.0-noble
+    profiles: ['e2e']
+    working_dir: /app
+    ipc: host
+    command: sh -c "npm ci && npm run test:e2e"
+    environment:
+      CI: 'true'
+      NPM_CONFIG_UPDATE_NOTIFIER: 'false'
+    volumes:
+      - .:/app
+      - e2e_node_modules:/app/node_modules
+
+volumes:
+  node_modules:
+  e2e_node_modules:
