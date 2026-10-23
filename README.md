@@ -17,22 +17,39 @@ taşarsa çevresindeki kırmızı halka dolar ve halka tamamen dolunca oyun bite
 yolculuk sayısıdır. Her hafta yeni yol parçaları gelir ve iki ödülden biri seçilir; şehir büyüdükçe
 yeni renkler eklenir.
 
-- **Haritalar:** Kadıköy, Beşiktaş, Üsküdar, Fatih, Şişli, Bakırköy. Her biri ilçenin kıyı ve
+- **Haritalar:** Kadıköy, Beşiktaş, Üsküdar, Fatih, Şişli, Bakırköy. Her biri ilçenin kıyı, dere ve
   park düzenini sadeleştirilmiş, özgün bir ızgarada yorumlar; binalar gerçek mahalle adlarını taşır.
 - **Sunucu gerekmez:** Oyun tamamen istemci tarafında çalışır. Statik dosya sunan herhangi bir
   web sunucusu (Nginx) yeterlidir. Harici API, CDN, hesap veya telemetri yoktur.
 
+## Oyunda neler var?
+
+- **Hazır otoyollar ve şehir dışı trafiği:** D-100 (E-5), O-1, Atatürk Bulvarı ve Büyükdere Caddesi
+  haritada hazırdır, hızlıdır ve silinemez. Harita kenarından gri araçlar gelir: çoğu şehirden geçip
+  gider, bir kısmı otoyola bağladığın ev ve iş yerlerine girer, bir kısmı da iş yerlerinden çıkıp
+  otoyola katılır. Skora sayılmazlar ama yolları doldururlar.
+- **Otoyol kavşakları:** Yolunu otoyolun herhangi bir yerine bağlayabilirsin. Ana yol önceliklidir:
+  otoyoldaki araçlar yavaşlamaz, yan yoldan gelen araç boşluk bekler.
+- **Trafik ışıkları:** Işık aracını seçip bir kavşağa dokun. Kuzey–güney ve doğu–batı yönleri sırayla
+  yeşil yanar, bekleyen olmayan yönde erken döner. Işıksız kavşakta çapraz trafik varken sürücüler
+  yavaşlayıp yol verir; yoğun kavşakta ışık bu yüzden belirgin şekilde hızlıdır.
+- **Dereler ve karşı kıyılar:** Kurbağalıdere, Ayamama Deresi, Haliç ve Boğaz haritayı parçalara ayırır.
+  Şehir karşı kıyıda da büyür, oraya köprüyle ulaşırsın. Suyu olmayan Şişli'de köprü verilmez.
+- **Haftalık ödüller:** +15 yol, +5 köprü, +10 bulvar ya da +2 trafik ışığı.
+- **Kolay başlangıç:** Rahat / Normal / Zor modları, isteğe bağlı rehberli öğretici, geri al, büyüyen
+  oyun alanı ve tek seferlik ipuçları.
+
 ## Ekran görüntüleri
 
-![Kadıköy: Marmara kıyısında evler tek bir iş yerine bağlanmış](docs/screenshots/kadikoy.png)
+![Beşiktaş: O-1 otoyolu, Boğaz kıyısı ve trafik ışıklı bir kavşak](docs/screenshots/besiktas.png)
 
-| Ana menü                                                    | Fatih: Haliç kıyısı                                             |
-| ----------------------------------------------------------- | --------------------------------------------------------------- |
-| ![İlçe seçimi ve zorluk modları](docs/screenshots/menu.png) | ![Fatih'te Haliç kıyısında yol ağı](docs/screenshots/fatih.png) |
+| Otoyol kavşağı ve trafik ışığı                                                             | Bakırköy: D-100, Ayamama Deresi, Marmara                                    |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| ![Sokağın D-100'e bağlandığı kavşak ve ışıklı kavşak](docs/screenshots/otoyol-kavsagi.png) | ![Bakırköy'de otoyol, dere köprüsü ve deniz](docs/screenshots/bakirkoy.png) |
 
-| Beşiktaş: haftalık ödül                                                        |
-| ------------------------------------------------------------------------------ |
-| ![Beşiktaş'ta yeni hafta başlarken ödül seçimi](docs/screenshots/besiktas.png) |
+| Ana menü                                                                                  |
+| ----------------------------------------------------------------------------------------- |
+| ![İlçe seçimi, zorluk modları ve otoyollu harita önizlemeleri](docs/screenshots/menu.png) |
 
 ## Gereksinimler
 
@@ -175,8 +192,11 @@ Bozuk veya uyumsuz kayıtlar uygulamayı çökertmez: güvenli varsayılanlara d
 
 ## Bilinen sınırlamalar
 
-- Tek yön motorda desteklenir ama sade arayüzde sunulmaz. Trafik ışıkları yoktur. Kavşaklar çakışma bölgesi rezervasyonuyla "en uzun bekleyen önce" kuralıyla
-  yönetilir. Mimari, ışık gibi başka kontrol politikalarının eklenmesine hazırdır (`JunctionPolicy`).
+- Tek yön motorda desteklenir ama sade arayüzde sunulmaz. Trafik ışıkları iki fazlıdır (kuzey–güney /
+  doğu–batı); ayrı sola dönüş fazı yoktur. Işıksız kavşaklar çakışma bölgesi rezervasyonu ve yol verme
+  kuralıyla yönetilir.
+- Otoyollar haritada sabittir; kavşaklar hemzemindir (rampa veya kavşaksız katılım yoktur), ana yol
+  önceliklidir.
 - Bulvar en fazla 2 şerit/yöndür. Şerit değiştirme yalnızca aynı yol parçası içinde yapılır.
   Dönüş için doğru şeride geçemeyen araç, durma çizgisinde son çare olarak yanlış şeritten döner.
 - Yol hücreleri ızgaraya bağlıdır (90° dönüşler). Su üzerinde köprü kurulabilir, ancak alt/üst geçit

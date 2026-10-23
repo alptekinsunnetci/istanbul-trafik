@@ -176,6 +176,11 @@ export const THROUGH = {
   firstDelay: 3,
 } as const;
 
+export const TIPS = {
+  /** Queue length (vehicles) at which the traffic-light tip appears once. */
+  queueForLight: 6,
+} as const;
+
 export type GameMode = 'rahat' | 'normal' | 'zor';
 
 export interface ModeRules {

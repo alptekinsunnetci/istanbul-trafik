@@ -85,7 +85,12 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
 - Sıralama politikası `JunctionPolicy` arayüzüyle değiştirilebilir.
 - **Yol verme:** Işıksız ve en az üç kollu bir kavşakta, çapraz yoldan 30 m içinde araç varsa (ya da
   kutuda çapraz yönden bir araç varsa) araç ancak durma çizgisine 5 m kala ve 3 m/sn altına yavaşlayınca
-  rezervasyon isteyebilir (`JUNCTION.yield*`). Çapraz trafik yoksa hızını korur.
+  rezervasyon isteyebilir (`JUNCTION.yield*`). Çapraz trafik yoksa hızını korur. Otoyol kavşaklarında
+  ana yol önceliklidir: otoyoldaki araçlar hiç yol vermez, yan sokaktan gelen araç ise yakında herhangi
+  bir araç varsa yol verir. Haritada bu kavşaklar sokağın otoyola kavisli bordürlerle açıldığı bir ağız
+  ve kenar çizgisinde boşlukla çizilir.
+- **İpucu:** Bir kavşak kilitlenince ya da kuyruk 6 araca ulaşınca, oyuncunun ışığı ve ışıksız bir
+  kavşağı varsa, oyun başına bir kez trafik ışığı önerilir.
 - **Trafik ışığı** (`grid.signal`, `SIGNAL`): Talebe duyarlı iki fazlı ışık. Kuzey–güney ve doğu–batı
   yönleri sırayla yeşil yanar. Yeşil en az 4 sn sürer; o yönde bekleyen yoksa ve diğer yönde varsa erken,
   en geç 14 sn sonra biter. Fazlar arasında kutu boşalana kadar (en az 1,5 sn) her yön kırmızıdır.

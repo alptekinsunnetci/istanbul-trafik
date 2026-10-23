@@ -7,6 +7,7 @@ import {
   type ModeRules,
   PLAYFIELD,
   type ResourceKind,
+  TIPS,
   UPGRADES,
 } from '../core/constants';
 import { EventBus } from '../core/event-bus';
@@ -139,6 +140,7 @@ export class GameSession {
   pendingUpgrades: Upgrade[] | null = null;
   summary: GameSummary | null = null;
   private undoStack: RoadSnapshot[] = [];
+  private lightTipShown = false;
   /** Separate pieces of dry ground; buildings on different pieces need a bridge. */
   private readonly regions: Int32Array;
   /** Districts without water never offer bridges. */
@@ -177,6 +179,24 @@ export class GameSession {
       lights: ECONOMY.startLights,
     };
     this.unsubscribers.push(this.sim.events.on('tripCompleted', () => this.score.onCompleted()));
+    this.unsubscribers.push(this.sim.events.on('gridlock', () => this.lightTip(true)));
+  }
+
+  /** Shown once per game, when a junction gets crowded and a light could help. */
+  private lightTip(gridlock: boolean): void {
+    if (this.lightTipShown || this.resources.lights <= 0) return;
+    const g = this.sim.grid;
+    let open = false;
+    for (const [cell, node] of this.sim.graph.nodes)
+      if (node.degree >= 3 && g.signal[cell] === 0) open = true;
+    if (!open) return;
+    this.lightTipShown = true;
+    this.events.emit('notice', {
+      kind: 'info',
+      text: gridlock
+        ? 'Bir kavşak kilitlendi. İkinci bir yol aç ya da kavşağa trafik ışığı koy (Işık).'
+        : 'Kuyruk uzuyor: kalabalık kavşağa trafik ışığı koyabilirsin (Işık).',
+    });
   }
 
   start(): void {
@@ -196,6 +216,9 @@ export class GameSession {
 
     const week = Math.floor(time / ECONOMY.weekLength) + 1;
     if (week > this.week) this.startWeek(week);
+
+    if (this.sim.tick % 20 === 0 && this.sim.queues.snapshot.longestQueue >= TIPS.queueForLight)
+      this.lightTip(false);
 
     if (time >= this.nextGrowthAt) {
       this.growCity();

@@ -4,7 +4,7 @@ import type { Building } from '../../src/core/world-state';
 import { GameSession } from '../../src/gameplay/game-session';
 import { eraseRoad, toggleSignal, UNLIMITED, noResources } from '../../src/map/road-editor';
 import { axisOf } from '../../src/traffic/junction-controller';
-import { addBuilding, addTrip, assertNoOverlap, makeSim, road, runFor, testGrid } from '../helpers';
+import { addBuilding, addTrip, assertNoOverlap, cellPath, makeSim, road, runFor, testGrid } from '../helpers';
 
 /** A plain crossing with straight traffic on both axes; optionally signalled. */
 function crossing(withLight: boolean, trips: number) {
@@ -153,5 +153,25 @@ describe('traffic lights', () => {
     // ...cars from the street that go in while highway traffic is near have given way first.
     expect(street.length).toBeGreaterThan(0);
     expect(Math.max(...street)).toBeLessThanOrEqual(JUNCTION.yieldSpeed + 0.5);
+  });
+
+  it('suggest a light once when a junction locks up', () => {
+    const s = new GameSession({ districtId: 'kadikoy', seed: 8 });
+    const notes: string[] = [];
+    s.events.on('notice', (n) => notes.push(n.text));
+    // No junction yet: nothing to suggest.
+    s.sim.events.emit('gridlock', []);
+    expect(notes).toHaveLength(0);
+    const b = s.sim.buildings;
+    const first = cellPath(s.sim.grid, b[1]!.door, b[0]!.door);
+    s.edit('road', first);
+    // A second house joins the middle of the first road: a T junction.
+    s.edit('road', cellPath(s.sim.grid, b[2]!.door, first[Math.floor(first.length / 2)]!));
+    const junction = [...s.sim.graph.nodes.values()].some((n) => n.degree >= 3);
+    expect(junction).toBe(true);
+    s.sim.events.emit('gridlock', []);
+    s.sim.events.emit('gridlock', []);
+    expect(notes.filter((t) => t.includes('trafik ışığı'))).toHaveLength(1);
+    s.dispose();
   });
 });
