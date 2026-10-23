@@ -174,4 +174,36 @@ describe('traffic lights', () => {
     expect(notes.filter((t) => t.includes('trafik ışığı'))).toHaveLength(1);
     s.dispose();
   });
+
+  it('give cars waiting to turn left a protected phase of their own', () => {
+    const g = testGrid(30, 30);
+    const b: Building[] = [];
+    const west = addBuilding(g, b, 'konut', 2, 14, 1);
+    const north = addBuilding(g, b, 'konut', 14, 2, 2);
+    const east = addBuilding(g, b, 'ticari', 26, 14, 3);
+    const south = addBuilding(g, b, 'ticari', 14, 26, 0);
+    road(g, [3, 14], [25, 14]);
+    road(g, [14, 3], [14, 25]);
+    const centre = g.idx(14, 14);
+    toggleSignal(g, [centre], UNLIMITED);
+    const sim = makeSim(g, b);
+    addTrip(sim, west, north, 8); // eastbound, turning left
+    addTrip(sim, east, west, 8); // westbound, straight on (opposing)
+    addTrip(sim, north, south, 6); // the other axis
+    let sawLeft = false;
+    const seen = new Set<number>();
+    runFor(sim, 400, () => {
+      const st = sim.junctions.signal(centre)!;
+      if (st.phase === 'left') sawLeft = true;
+      for (const v of sim.vehicles) {
+        const pass = v.junction;
+        if (!pass || pass.node !== centre || seen.has(v.id)) continue;
+        seen.add(v.id);
+        if (st.phase === 'left') expect(pass.turn).not.toBe('straight');
+      }
+    });
+    expect(sim.stats.completed).toBe(22);
+    expect(sawLeft).toBe(true);
+    expect(sim.gridlocks).toHaveLength(0);
+  });
 });

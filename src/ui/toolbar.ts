@@ -46,7 +46,7 @@ export class Toolbar {
     'div',
     'bridge',
     'Köprü',
-    'Kalan köprü parçası — su üstüne çizince kullanılır',
+    'Kalan köprü parçası — su üstüne çizince ya da otoyolun üstünden düz geçince (üst geçit) kullanılır',
     'bridges-value',
   );
   private boulevards = badge(
@@ -136,7 +136,7 @@ export class Toolbar {
     const bv = this.boulevards.button as HTMLButtonElement;
     bv.setAttribute('aria-pressed', String(tool === 'boulevard'));
     bv.disabled = !editable || (res.boulevards <= 0 && tool !== 'boulevard');
-    // A district without water has no use for bridges.
+    // A map without water or highways has no use for bridges.
     this.bridges.root.hidden = !water;
     // Boulevards appear only once the player owns some.
     this.boulevards.root.hidden = res.boulevards <= 0 && tool !== 'boulevard';

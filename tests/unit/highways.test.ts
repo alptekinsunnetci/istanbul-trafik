@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DISTRICTS } from '../../src/map/districts';
+import { Terrain } from '../../src/map/grid';
 import { createDistrictGrid, highwayPaths, inBounds, landRegions } from '../../src/map/map-generator';
 import { GameSession } from '../../src/gameplay/game-session';
 import { placeHighwaySigns } from '../../src/rendering/map-renderer';
@@ -27,8 +28,12 @@ describe('highways', () => {
       }
       const gates = s.sim.buildings.filter((b) => b.kind === 'kapi');
       expect(gates.length, d.name).toBeGreaterThanOrEqual(2);
-      // Every gateway can reach every other one along the highways.
-      for (const a of gates) for (const b of gates) if (a !== b) expect(s.sim.reachable(a, b)).toBe(true);
+      // Every gateway reaches at least one other along its highway (separate highways need not meet).
+      for (const a of gates)
+        expect(
+          gates.some((b) => b !== a && s.sim.reachable(a, b)),
+          `${d.name} ${a.name}`,
+        ).toBe(true);
       s.dispose();
     }
   });
@@ -138,22 +143,26 @@ describe('highways', () => {
 });
 
 describe('bridges', () => {
-  it('districts without water never offer bridges', () => {
-    const s = new GameSession({ districtId: 'sisli', seed: 3, mode: 'rahat' });
-    expect(s.hasWater).toBe(false);
-    expect(s.resources.bridges).toBe(0);
-    s.start();
-    let offered = false;
-    s.events.on('upgrade', (u) => {
-      if (u.some((x) => x.kind === 'bridges')) offered = true;
-    });
-    play(s, 500);
-    expect(offered).toBe(false);
+  it('a district without water still gets bridges, for overpasses across its highways', () => {
+    const s = new GameSession({ districtId: 'sisli', seed: 3 });
+    expect(s.sim.grid.terrain.some((t) => t === Terrain.Water)).toBe(false);
+    expect(s.usesBridges).toBe(true);
+    expect(s.resources.bridges).toBeGreaterThan(0);
     s.dispose();
   });
 
   it('water districts have dry ground on both sides of a river or channel', () => {
-    for (const id of ['kadikoy', 'fatih', 'bakirkoy', 'besiktas']) {
+    for (const id of [
+      'kadikoy',
+      'fatih',
+      'bakirkoy',
+      'besiktas',
+      'uskudar',
+      'sariyer',
+      'beykoz',
+      'beyoglu',
+      'basaksehir',
+    ]) {
       const d = DISTRICTS.find((x) => x.id === id)!;
       const g = createDistrictGrid(d);
       const regions = new Set(landRegions(g).filter((r) => r >= 0));

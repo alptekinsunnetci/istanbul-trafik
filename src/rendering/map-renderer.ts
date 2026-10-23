@@ -175,32 +175,55 @@ function contour(g: Graphics, f: Field, level: number, color: number): void {
 export interface PlacedLabel {
   text: string;
   kind: MapLabel['kind'];
-  vertical: boolean;
+  /** Small name that follows a narrow river. */
+  river: boolean;
+  /** Rotation in radians (0 = horizontal). */
+  angle: number;
   /** Centre in world metres. */
   x: number;
   y: number;
 }
 
+/** Names may sit this many cells beyond the playable area, where they show dimmed. */
+const LABEL_MARGIN = 5;
+
 /**
  * Puts each place name on the cell of its water body or park that is closest
- * to its authored anchor where the whole name fits on that place inside the
- * playable area, off the shore and clear of other names. Names that do not
- * fit yet are left out.
+ * to its authored anchor where the whole name fits on that place, off the
+ * shore and clear of other names. Places inside the playable area are
+ * preferred, but a name may also sit just outside it (dimmed), so seas and
+ * shores are named before the city reaches them. River names are small and
+ * follow the local direction of the river. Names that do not fit are left out.
  */
 export function placeLabels(grid: Grid, labels: readonly MapLabel[], bounds: Bounds): PlacedLabel[] {
   const sx = grid.width / MAP.defaultWidth;
   const sy = grid.height / MAP.defaultHeight;
   const out: PlacedLabel[] = [];
+  const area: Bounds = {
+    x0: Math.max(0, bounds.x0 - LABEL_MARGIN),
+    y0: Math.max(0, bounds.y0 - LABEL_MARGIN),
+    x1: Math.min(grid.width - 1, bounds.x1 + LABEL_MARGIN),
+    y1: Math.min(grid.height - 1, bounds.y1 + LABEL_MARGIN),
+  };
   // Cells already used by a name, so that two names never overlap.
   const taken = new Set<number>();
   for (const label of labels) {
     const type = label.kind === 'water' ? Terrain.Water : Terrain.Park;
     const is = ofType(grid, type);
+    const ax = label.x * sx;
+    const ay = label.y * sy;
+    const river = label.river === true;
     // Rough length of the written name in cells; the whole name must sit on its place.
     const half = Math.round((label.text.length * (label.kind === 'water' ? 0.6 : 0.34)) / 2);
     // Cells covered by the name, plus a one-cell margin across it so text keeps off the shore.
     const span = (x: number, y: number): number[] => {
       const cells: number[] = [];
+      if (river) {
+        for (let dy = -2; dy <= 2; dy++)
+          for (let dx = -2; dx <= 2; dx++)
+            if (grid.inBounds(x + dx, y + dy)) cells.push(grid.idx(x + dx, y + dy));
+        return cells;
+      }
       for (let k = -half; k <= half; k++)
         for (let m = -1; m <= 1; m++) {
           const cx = label.vertical ? x + m : x + k;
@@ -212,24 +235,18 @@ export function placeLabels(grid: Grid, labels: readonly MapLabel[], bounds: Bou
     };
     const fits = (x: number, y: number): boolean => {
       const cells = span(x, y);
-      if (cells.length === 0) return false;
-      return cells.every((c) => {
-        const cx = grid.cx(c);
-        const cy = grid.cy(c);
-        return is(cx, cy) && inBounds(bounds, cx, cy) && !taken.has(c);
-      });
+      if (cells.length === 0 || cells.some((c) => taken.has(c))) return false;
+      if (river) return is(x, y) && cells.filter((c) => grid.terrain[c] === type).length >= 6;
+      return cells.every((c) => is(grid.cx(c), grid.cy(c)));
     };
-    const ax = label.x * sx;
-    const ay = label.y * sy;
     const reach = (label.kind === 'water' ? 22 : 4) * sx;
     let best: [number, number] | null = null;
     let bestScore = Infinity;
-    for (let y = bounds.y0 + 1; y < bounds.y1; y++) {
-      for (let x = bounds.x0 + 1; x < bounds.x1; x++) {
-        if (!fits(x, y)) continue;
+    for (let y = area.y0 + 1; y < area.y1; y++) {
+      for (let x = area.x0 + 1; x < area.x1; x++) {
         const d = Math.hypot(x + 0.5 - ax, y + 0.5 - ay);
-        if (d > reach) continue;
-        const score = d;
+        if (d > reach || !fits(x, y)) continue;
+        const score = d + (inBounds(bounds, x, y) ? 0 : 8);
         if (score < bestScore) {
           bestScore = score;
           best = [x, y];
@@ -241,12 +258,45 @@ export function placeLabels(grid: Grid, labels: readonly MapLabel[], bounds: Bou
     out.push({
       text: label.text,
       kind: label.kind,
-      vertical: label.vertical === true,
+      river,
+      angle: river ? riverAngle(grid, best[0], best[1]) : label.vertical ? -Math.PI / 2 : 0,
       x: (best[0] + 0.5) * C,
       y: (best[1] + 0.5) * C,
     });
   }
   return out;
+}
+
+/** Main direction of the water around a cell (principal axis), kept readable (−90°…90°). */
+function riverAngle(grid: Grid, x: number, y: number): number {
+  let n = 0;
+  let mx = 0;
+  let my = 0;
+  const pts: [number, number][] = [];
+  for (let dy = -3; dy <= 3; dy++)
+    for (let dx = -3; dx <= 3; dx++) {
+      if (!grid.inBounds(x + dx, y + dy) || grid.terrain[grid.idx(x + dx, y + dy)] !== Terrain.Water)
+        continue;
+      pts.push([dx, dy]);
+      mx += dx;
+      my += dy;
+      n++;
+    }
+  if (n < 2) return 0;
+  mx /= n;
+  my /= n;
+  let sxx = 0;
+  let syy = 0;
+  let sxy = 0;
+  for (const [px, py] of pts) {
+    sxx += (px - mx) ** 2;
+    syy += (py - my) ** 2;
+    sxy += (px - mx) * (py - my);
+  }
+  let a = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  if (a > Math.PI / 2) a -= Math.PI;
+  if (a <= -Math.PI / 2) a += Math.PI;
+  return a;
 }
 
 export interface PlacedSign {
@@ -285,6 +335,33 @@ export function placeHighwaySigns(grid: Grid, district: District, bounds: Bounds
     }
     if (best < 0) continue;
     out.push({ text: hw.name, x: (grid.cx(best) + 0.5) * C, y: (grid.cy(best) + 0.5) * C });
+  }
+  return out;
+}
+
+/** Highways the metrobüs runs on (in its own lane in the median). */
+const METROBUS_ROADS = ['D-100', 'O-1'];
+/** The metrobüs starts and ends this far beyond the map edge (cells). */
+const BEYOND = 10;
+
+/** Metrobüs routes: the eligible highways as world polylines that start and end beyond the map edge. */
+export function metrobusRoutes(grid: Grid, district: District): [number, number][][] {
+  const out: [number, number][][] = [];
+  for (const hw of highwayPaths(grid, district)) {
+    if (!METROBUS_ROADS.includes(hw.name) || hw.cells.length < 2) continue;
+    const pts = hw.cells.map((c) => [(grid.cx(c) + 0.5) * C, (grid.cy(c) + 0.5) * C] as [number, number]);
+    const extend = (from: [number, number], toward: [number, number]): [number, number] => {
+      const dx = Math.sign(from[0] - toward[0]);
+      const dy = Math.sign(from[1] - toward[1]);
+      return [from[0] + dx * BEYOND * C, from[1] + dy * BEYOND * C];
+    };
+    const first = pts[0] as [number, number];
+    const last = pts[pts.length - 1] as [number, number];
+    out.push([
+      extend(first, pts[1] as [number, number]),
+      ...pts,
+      extend(last, pts[pts.length - 2] as [number, number]),
+    ]);
   }
   return out;
 }

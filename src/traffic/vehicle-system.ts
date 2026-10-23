@@ -278,9 +278,11 @@ export class VehicleSystem {
   /**
    * True when a car must slow down and give way before entering this
    * junction. Where a street joins a highway, the highway has priority: its
-   * cars never yield, while cars from the street give way to any traffic.
+   * cars never yield. A car from the street that turns right merges like on a
+   * ramp: it only gives way when a highway car is coming in the lane it joins.
+   * Any other movement from the street gives way to all nearby traffic.
    */
-  private mustYield(edge: GraphEdge, near: Map<number, number>): boolean {
+  private mustYield(edge: GraphEdge, mv: Move, near: Map<number, number>): boolean {
     const w = this.w;
     const node = edge.to;
     if (w.junctions.signal(node)) return false;
@@ -290,8 +292,10 @@ export class VehicleSystem {
     const before = edge.cells[edge.cells.length - 2] as number;
     if (grid.isHighway(node)) {
       if (grid.isHighway(before)) return false;
-      // From the side street: wait for a gap in the highway traffic.
-      return ((near.get(node) ?? 0) & ~(1 << edge.lastDir)) !== 0;
+      const around = near.get(node) ?? 0;
+      if (mv.turn === 'right') return (around & (1 << mv.next.firstDir)) !== 0;
+      // Crossing or turning left from the side street: wait for a gap in all highway traffic.
+      return (around & ~(1 << edge.lastDir)) !== 0;
     }
     const inDir = edge.lastDir;
     const crossing = inDir === 0 || inDir === 2 ? 0b1010 : 0b0101;
@@ -317,7 +321,7 @@ export class VehicleSystem {
       );
       if (dist > reach) continue;
       // No light and traffic on the crossing road: slow down and look first.
-      if (this.mustYield(edge, near) && (dist > JUNCTION.yieldDistance || v.v > JUNCTION.yieldSpeed))
+      if (this.mustYield(edge, mv, near) && (dist > JUNCTION.yieldDistance || v.v > JUNCTION.yieldSpeed))
         continue;
       // Prefer reaching a suitable lane first; fall back to any lane at the stop line.
       if (!lanesForTurn(edge.lanes, mv.turn).includes(v.lane) && dist > 8) continue;
@@ -327,6 +331,7 @@ export class VehicleSystem {
         node: edge.to,
         zones: zonesFor(edge.lastDir, mv.turn),
         inDir: edge.lastDir,
+        turn: mv.turn,
         key: movementKey(edge.id, v.lane, mv.next.id, exitLane),
         exitLaneKey: laneKey(mv.next.index, exitLane),
         need: v.length + IDM.minGap,

@@ -148,7 +148,7 @@ export interface SavedGame {
   demandReassign: number;
   nextVehicleId: number;
   nextTripId: number;
-  grid: { road: string; links: string; lanes: string; locked: string; signal: string };
+  grid: { road: string; links: string; lanes: string; locked: string; signal: string; overpass: string };
   buildings: Building[];
   vehicles: Vehicle[];
   trailing: TrailingHold[];
@@ -398,6 +398,7 @@ export function parseSavedGame(raw: unknown): SavedGame {
       lanes: str(grid.lanes, 'grid.lanes', cells * 2),
       locked: str(grid.locked, 'grid.locked', cells * 2),
       signal: str(grid.signal, 'grid.signal', cells * 2),
+      overpass: str(grid.overpass, 'grid.overpass', cells * 2),
     },
     buildings: arr(o.buildings, 'buildings', 500).map((b, i) => parseBuilding(b, `buildings[${i}]`, cells)),
     vehicles: arr(o.vehicles, 'vehicles', 2000).map((v, i) => parseVehicle(v, `vehicles[${i}]`)),

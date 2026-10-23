@@ -9,6 +9,9 @@ const BOULEVARD_WIDTH = 14.4;
 const HIGHWAY_WIDTH = 16;
 /** Kerb radius where a street joins a highway. */
 const MOUTH_RADIUS = 4.5;
+/** Merge / exit lane beside a highway junction: length along the highway and width at the junction. */
+const TAPER_LENGTH = C * 1.3;
+const TAPER_WIDTH = 3.4;
 /** Highways run on past the map edge where they leave the city. */
 const OFF_MAP = C * 40;
 
@@ -29,6 +32,8 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme): void {
   const highways: [number, number][] = [];
   /** Streets joining a highway: [highway cell, street cell, direction from the highway]. */
   const ramps: [number, number, Dir][] = [];
+  /** Highway cells with a street crossing over them. */
+  const overpasses = new Set<number>();
   const bridges: [number, number][] = [];
   const highwayBridges: [number, number][] = [];
   const lone: number[] = [];
@@ -43,8 +48,9 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme): void {
       if (n < i) continue; // each connection once
       const wide = grid.lanes[i] === 2 && grid.lanes[n] === 2;
       if (grid.isHighway(i) !== grid.isHighway(n)) {
-        if (grid.isHighway(i)) ramps.push([i, n, d]);
-        else ramps.push([n, i, opposite(d)]);
+        const [h, s, dir] = grid.isHighway(i) ? [i, n, d] : [n, i, opposite(d)];
+        if (grid.overpass[h] === 1) overpasses.add(h);
+        else ramps.push([h, s, dir]);
       }
       if (grid.isHighway(i) && grid.isHighway(n)) highways.push([i, n]);
       else (wide ? boulevards : streets).push([i, n]);
@@ -123,6 +129,15 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme): void {
       .lineTo(s2x, s2y)
       .closePath()
       .fill(theme.road);
+    // Merge and exit lanes: the highway edge bends out on both sides of the junction.
+    for (const side of [1, -1]) {
+      const [a1x, a1y] = at(e - 2, side * (w + r));
+      const [a2x, a2y] = at(e - 2, side * (w + r + TAPER_LENGTH));
+      const [b2x, b2y] = at(e, side * (w + r + TAPER_LENGTH));
+      const [b1x, b1y] = at(e + TAPER_WIDTH, side * (w + r));
+      g.poly([a1x, a1y, a2x, a2y, b2x, b2y, b1x, b1y]).fill(theme.road);
+      g.moveTo(b1x, b1y).lineTo(b2x, b2y).stroke({ width: 1.5, color: theme.highwayEdge, cap: 'round' });
+    }
   }
   // Dashed centre line of the highways.
   const dashes: [number, number, number, number][] = [];
@@ -138,6 +153,24 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme): void {
       dashes.push([ax + dx * (k + 0.3), ay + dy * (k + 0.3), ax + dx * (k + 0.7), ay + dy * (k + 0.7)]);
   }
   lines(dashes, 1.2, theme.highwayEdge);
+  // Overpasses: the street crosses on a small bridge with a soft shadow below.
+  for (const c of overpasses) {
+    const [cx, cy] = center(grid, c);
+    // The street runs along the axis where the neighbours are not highway.
+    const street = DIRS.find((d) => grid.connected(c, d) && !grid.isHighway(grid.neighbor(c, d)));
+    if (street === undefined) continue;
+    const vertical = street === 0 || street === 2;
+    const half = HIGHWAY_WIDTH / 2 + 4;
+    const [ax, ay, bx, by] = vertical ? [cx, cy - half, cx, cy + half] : [cx - half, cy, cx + half, cy];
+    const w = grid.lanes[grid.neighbor(c, street)] === 2 ? BOULEVARD_WIDTH : STREET_WIDTH;
+    g.moveTo(ax + 2.5, ay + 2.5)
+      .lineTo(bx + 2.5, by + 2.5)
+      .stroke({ width: w + 4, color: theme.shadow, alpha: 0.25, cap: 'butt' });
+    g.moveTo(ax, ay)
+      .lineTo(bx, by)
+      .stroke({ width: w + 4, color: theme.bridgeEdge, cap: 'butt' });
+    g.moveTo(ax, ay).lineTo(bx, by).stroke({ width: w, color: theme.road, cap: 'butt' });
+  }
   for (const i of lone) {
     const [x, y] = center(grid, i);
     g.circle(x, y, (grid.lanes[i] === 2 ? BOULEVARD_WIDTH : STREET_WIDTH) / 2).fill(theme.road);

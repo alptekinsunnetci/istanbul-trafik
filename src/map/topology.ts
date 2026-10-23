@@ -76,6 +76,13 @@ function makeNode(grid: Grid, i: number): GraphNode {
   };
 }
 
+function nextToBuilding(grid: Grid, i: number): boolean {
+  return DIRS.some((d) => {
+    const n = grid.neighbor(i, d);
+    return n >= 0 && (grid.building[n] as number) >= 0;
+  });
+}
+
 function doorBuilding(grid: Grid, i: number): number {
   for (const d of DIRS) {
     const n = grid.neighbor(i, d);
@@ -85,7 +92,10 @@ function doorBuilding(grid: Grid, i: number): number {
 }
 
 export function isNodeCell(grid: Grid, i: number): boolean {
-  if (grid.locked[i] === 1) return true;
+  // Both roads of an overpass pass straight through.
+  if (grid.overpass[i] === 1 && grid.degree(i) === 4) return false;
+  // Entrances are nodes; highway cells only where a gateway stands next to them.
+  if (grid.locked[i] === 1 && (!grid.isHighway(i) || nextToBuilding(grid, i))) return true;
   const connected = DIRS.filter((d) => grid.connected(i, d));
   if (connected.length !== 2) return true;
   const [d1, d2] = connected as [Dir, Dir];
@@ -114,12 +124,14 @@ function walkChain(grid: Grid, nodes: Set<number>, start: number, firstDir: Dir)
   while (!nodes.has(cur)) {
     cells.push(cur);
     let next: Dir | null = null;
-    for (const d of DIRS) {
-      if (d !== opposite(prevDir) && grid.connected(cur, d)) {
-        next = d;
-        break;
+    if (grid.overpass[cur] === 1 && grid.connected(cur, prevDir)) next = prevDir;
+    else
+      for (const d of DIRS) {
+        if (d !== opposite(prevDir) && grid.connected(cur, d)) {
+          next = d;
+          break;
+        }
       }
-    }
     if (next === null) break; // unreachable for well-formed pass-through cells
     if (!grid.hasLink(cur, next)) forward = false;
     dirs.push(next);

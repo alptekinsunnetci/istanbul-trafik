@@ -109,12 +109,48 @@ export const HIGH_CONTRAST_THEME: Theme = {
   groups: [0xc0442a, 0x0f6e64, 0xb07a00, 0x4f3a8c, 0x2f6e22],
 };
 
+/** Seasons change every in-game week, in this order. */
+export const SEASONS = ['İlkbahar', 'Yaz', 'Sonbahar', 'Kış'] as const;
+
+export function seasonOf(week: number): number {
+  return (((week - 1) % SEASONS.length) + SEASONS.length) % SEASONS.length;
+}
+
+/** Linear blend of two colours (t = 0 → a, t = 1 → b). */
+export function mix(a: number, b: number, t: number): number {
+  const ch = (shift: number): number => {
+    const x = (a >> shift) & 0xff;
+    const y = (b >> shift) & 0xff;
+    return Math.round(x + (y - x) * t);
+  };
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+
+/** How each season tints ground, parks and water: [target colour, amount]. */
+const SEASON_TINTS: readonly { land: [number, number]; park: [number, number]; water: [number, number] }[] = [
+  // İlkbahar: fresh green parks.
+  { land: [0xeef3df, 0.06], park: [0xa9d98e, 0.35], water: [0x9bd3e3, 0.1] },
+  // Yaz: warm sunny ground, deep green parks.
+  { land: [0xf8e3b8, 0.12], park: [0x98c97c, 0.25], water: [0x7cc4dc, 0.15] },
+  // Sonbahar: orange and brown leaves.
+  { land: [0xefd9c0, 0.1], park: [0xe0ad6a, 0.5], water: [0x8fb4c8, 0.15] },
+  // Kış: snow on the ground and in the parks, grey-blue water.
+  { land: [0xf9fafb, 0.55], park: [0xe8f0ec, 0.6], water: [0xa6c0cf, 0.3] },
+];
+
 /**
  * Each district gets its own soft ground and water tint, derived into the
- * full set of terrain colours. The high contrast theme is left untouched.
+ * full set of terrain colours, and shifted by the season. The high contrast
+ * theme is left untouched.
  */
-export function districtTheme(base: Theme, palette: DistrictPalette | undefined): Theme {
+export function districtTheme(base: Theme, palette: DistrictPalette | undefined, season = 0): Theme {
   if (!palette || base === HIGH_CONTRAST_THEME) return base;
+  const tint = SEASON_TINTS[season % SEASON_TINTS.length] as (typeof SEASON_TINTS)[number];
+  palette = {
+    land: mix(palette.land, tint.land[0], tint.land[1]),
+    park: mix(palette.park, tint.park[0], tint.park[1]),
+    water: mix(palette.water, tint.water[0], tint.water[1]),
+  };
   return {
     ...base,
     background: palette.land,

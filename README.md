@@ -17,8 +17,9 @@ taşarsa çevresindeki kırmızı halka dolar ve halka tamamen dolunca oyun bite
 yolculuk sayısıdır. Her hafta yeni yol parçaları gelir ve iki ödülden biri seçilir; şehir büyüdükçe
 yeni renkler eklenir.
 
-- **Haritalar:** Kadıköy, Beşiktaş, Üsküdar, Fatih, Şişli, Bakırköy. Her biri ilçenin kıyı, dere ve
-  park düzenini sadeleştirilmiş, özgün bir ızgarada yorumlar; binalar gerçek mahalle adlarını taşır.
+- **Haritalar (12 ilçe):** Beşiktaş, Kadıköy, Sarıyer, Şişli, Bakırköy, Beykoz, Üsküdar, Beyoğlu,
+  Başakşehir, Maltepe, Fatih ve Bağcılar. Her biri ilçenin kıyı, dere, baraj, orman ve otoyol düzenini
+  sadeleştirilmiş, özgün bir ızgarada yorumlar; binalar gerçek mahalle adlarını taşır.
 - **Sunucu gerekmez:** Oyun tamamen istemci tarafında çalışır. Statik dosya sunan herhangi bir
   web sunucusu (Nginx) yeterlidir. Harici API, CDN, hesap veya telemetri yoktur.
 
@@ -28,14 +29,23 @@ yeni renkler eklenir.
   haritada hazırdır, hızlıdır ve silinemez. Harita kenarından gri araçlar gelir: çoğu şehirden geçip
   gider, bir kısmı otoyola bağladığın ev ve iş yerlerine girer, bir kısmı da iş yerlerinden çıkıp
   otoyola katılır. Skora sayılmazlar ama yolları doldururlar.
-- **Otoyol kavşakları:** Yolunu otoyolun herhangi bir yerine bağlayabilirsin. Ana yol önceliklidir:
-  otoyoldaki araçlar yavaşlamaz, yan yoldan gelen araç boşluk bekler.
+- **Otoyol kavşakları ve üst geçit:** Yolunu otoyolun üstünde bitirirsen ya da orada dönersen otoyola
+  bağlanır: kavşakta katılma ve ayrılma şeritleri vardır, ana yol önceliklidir. Sağa dönüp katılan araç
+  yalnızca katılacağı şeritte araç gelirken bekler. Otoyolun üstünden düz geçen yol ise kavşak yapmadan
+  **üst geçit** olur (1 köprü parçası); iki yolun trafiği birbirini hiç beklemez.
 - **Trafik ışıkları:** Işık aracını seçip bir kavşağa dokun. Kuzey–güney ve doğu–batı yönleri sırayla
-  yeşil yanar, bekleyen olmayan yönde erken döner. Işıksız kavşakta çapraz trafik varken sürücüler
+  yeşil yanar, bekleyen olmayan yönde erken döner; sola dönmeyi bekleyen araçlar varsa onlara ayrı,
+  korumalı bir faz verilir (lambada beyaz nokta). Işıksız kavşakta çapraz trafik varken sürücüler
   yavaşlayıp yol verir; yoğun kavşakta ışık bu yüzden belirgin şekilde hızlıdır.
-- **Dereler ve karşı kıyılar:** Kurbağalıdere, Ayamama Deresi, Haliç ve Boğaz haritayı parçalara ayırır.
-  Şehir karşı kıyıda da büyür, oraya köprüyle ulaşırsın. Suyu olmayan Şişli'de köprü verilmez.
+- **Dereler ve karşı kıyılar:** Kurbağalıdere, Ayamama Deresi, Haliç ve Boğaz (Beşiktaş'ta Anadolu,
+  Üsküdar'da Avrupa yakası) haritayı parçalara ayırır. Şehir karşı kıyıda da büyür, oraya köprüyle
+  ulaşırsın. Suyu olmayan Şişli'de köprüler üst geçit için kullanılır.
+- **Mevsimler:** Her hafta mevsim değişir (ilkbahar, yaz, sonbahar, kış); zemin, park ve su renkleri
+  mevsime göre döner. Dereler ve kıyılar adlarıyla yazılır, deniz adları alan oraya ulaşmadan görünür.
 - **Haftalık ödüller:** +15 yol, +5 köprü, +10 bulvar ya da +2 trafik ışığı.
+- **Şehir hayatı:** D-100 ve O-1'de belli aralıklarla kendi şeridinde metrobüs geçer. Boğaz'ın ve
+  denizin üstünde ara ara martılar uçar ve öter; martıya dokunursan +2 yol parçası kazanırsın. Trafik
+  çok sıkışınca kornalar duyulur, ama sınırlıdır: birkaç kez çalar, sıkışıklık geçene kadar susar.
 - **Kolay başlangıç:** Rahat / Normal / Zor modları, isteğe bağlı rehberli öğretici, geri al, büyüyen
   oyun alanı ve tek seferlik ipuçları.
 
@@ -124,7 +134,7 @@ npm run test:e2e
 | `format` / `format:check` | Prettier                                                |
 | `test` / `test:watch`     | Vitest birim + entegrasyon testleri                     |
 | `test:e2e`                | Playwright tarayıcı testleri                            |
-| `bench`                   | Uzun süreli performans ve kararlılık testi              |
+| `bench`                   | Performans/kararlılık testi ve 12 ilçede denge botu     |
 | `check`                   | typecheck + lint + biçim + test                         |
 | `build:prod`              | `check` başarılıysa `build`                             |
 | `licenses`                | `docs/THIRD_PARTY_LICENSES.md` dosyasını yeniden üretir |
@@ -138,6 +148,7 @@ npm run test:e2e
 | Sil düğmesi ya da sağ tık + sürükle        | Yolu sil, parçalar geri gelir                      |
 | Işık düğmesi, sonra kavşağa dokun          | Trafik ışığı koy; tekrar dokununca kalkar          |
 | Araca veya binaya dokunma                  | Ayrıntıları göster                                 |
+| Uçan martıya dokunma                       | +2 yol parçası                                     |
 | Tekerlek, `+` / `−`, iki parmakla kıstırma | Yakınlaştır / uzaklaştır                           |
 | Orta tık + sürükle, `W A S D`, iki parmak  | Haritayı kaydır                                    |
 | `Boşluk`                                   | Duraklat / devam                                   |
@@ -145,23 +156,28 @@ npm run test:e2e
 | `T` · `I` · `F`                            | Trafik katmanı · İstatistikler · Haritayı sığdır   |
 | `Esc` veya ←                               | Menü (istatistik, yeniden başlat, ayarlar, yardım) |
 
-- **Parçalar:** Her kara hücresi 1 yol parçası, her su hücresi 1 köprü parçası kullanır. Bulvar
-  (iki şeritli, hızlı yol) mevcut yolun üstüne çizilir ve hücre başına 1 bulvar parçası kullanır.
+- **Parçalar:** Her kara hücresi 1 yol parçası, her su hücresi ve her üst geçit 1 köprü parçası kullanır.
+  Bulvar (iki şeritli, hızlı yol) mevcut yolun üstüne çizilir ve hücre başına 1 bulvar parçası kullanır.
+  6 köprü ve 2 trafik ışığıyla başlanır.
 - Her hafta (90 sn) +20 yol parçası gelir ve iki ödülden biri seçilir (+15 yol, +5 köprü, +10 bulvar,
-  +2 trafik ışığı). Oyun seçim yapılana kadar bekler. Suyu olmayan ilçede (Şişli) köprü verilmez.
-- **Su ve köprüler:** Kurbağalıdere (Kadıköy), Ayamama Deresi (Bakırköy), Haliç'in karşı kıyısı (Fatih)
-  ve Boğaz'ın Anadolu kıyısı (Beşiktaş) haritayı parçalara ayırır. Şehir büyüdükçe bazı binalar karşı
-  kıyıda çıkar; oraya ancak köprüyle ulaşılır.
-- **Hazır otoyollar:** D-100 (E-5), O-1, Atatürk Bulvarı ve Büyükdere Caddesi haritada hazırdır. Bunlar
+  +2 trafik ışığı). Oyun seçim yapılana kadar bekler.
+- **Su ve köprüler:** Dereler (Kurbağalıdere, Ayamama, Göksu, Sazlıdere), Haliç ve Boğaz'ın karşı
+  kıyıları haritayı parçalara ayırır. İlk mahalle hep tek kıyıda başlar; 2. haftadan sonra bazı binalar
+  karşı kıyıda çıkar ve oraya köprüyle ulaşılır.
+- **Hazır otoyollar:** D-100 (E-5), O-1, O-2, O-4, TEM, Basın Ekspres, Atatürk ve Tarlabaşı bulvarları,
+  Büyükdere Caddesi haritada hazırdır. Bunlar
   hızlıdır (90 km/sa) ve silinemez. Harita kenarından gelen gri araçların çoğu şehirden geçip gider; bir
   kısmı otoyola bağladığın ev ve iş yerlerine girer, bir kısmı da iş yerlerinden çıkıp otoyola katılır.
   Bu araçlar skora ve raptiyelere sayılmaz, ama yolları doldurur.
 - **Trafik ışığı:** Işıksız kavşakta karşı yönden araç gelirse sürücüler yavaşlayıp yol verir. Işık
-  kuzey–güney ve doğu–batı yönlerine sırayla yeşil yakar; bekleyen olmayan yönde erken döner. 2 ışıkla
-  başlanır; ışık kaldırılınca ya da kavşak silinince parçası geri gelir.
+  kuzey–güney ve doğu–batı yönlerine sırayla yeşil yakar, bekleyen olmayan yönde erken döner ve sola
+  dönmeyi bekleyenlere ayrı bir faz verir. Işık kaldırılınca ya da kavşak silinince parçası geri gelir.
+- **Üst geçit:** Otoyolun üstünden düz geçen yol kavşak yerine üst geçit olur (1 köprü parçası). Otoyola
+  bağlanmak için yolu otoyolun üstünde bitir ya da orada dön.
 - **Zorluk:** Rahat (oyun bitmez, sakin tempo), Normal (varsayılan) ve Zor. Seçim hatırlanır; en iyi
   skorlar ilçe ve mod başına ayrı tutulur.
-- **Oynayarak öğren:** Menüdeki rehberli oyun 4 adımda anlatır; saat ilk yol bağlanana kadar bekler.
+- **Oynayarak öğren:** Menüdeki rehberli oyun 7 adımda anlatır (yol çiz, ilk araba, diğer evler, geri
+  al, trafik ışığı, otoyol ve üst geçit, köprü); saat ilk yol bağlanana kadar bekler.
 - **Büyüyen alan:** Oyun küçük bir alanla başlar (dikey ekranda dikey), her hafta genişler; kamera
   alanı kendiliğinden sığdırır, kaydırma ve yakınlaştırma isteğe bağlıdır.
 - Aynı **harita tohumu** aynı başlangıç haritasını ve trafik akışını üretir.
@@ -189,24 +205,6 @@ değildir. Bu sınır ESLint kuralıyla zorlanır.
 Ayarlar, en iyi skorlar, son 20 oyunun özeti ve devam edilebilir aktif oyun yalnızca tarayıcının
 `localStorage` alanında tutulur. **Sunucuya yedeklenmez**; tarayıcı/site verileri silinirse kaybolur.
 Bozuk veya uyumsuz kayıtlar uygulamayı çökertmez: güvenli varsayılanlara dönülür ve kullanıcıya bildirilir.
-
-## Bilinen sınırlamalar
-
-- Tek yön motorda desteklenir ama sade arayüzde sunulmaz. Trafik ışıkları iki fazlıdır (kuzey–güney /
-  doğu–batı); ayrı sola dönüş fazı yoktur. Işıksız kavşaklar çakışma bölgesi rezervasyonu ve yol verme
-  kuralıyla yönetilir.
-- Otoyollar haritada sabittir; kavşaklar hemzemindir (rampa veya kavşaksız katılım yoktur), ana yol
-  önceliklidir.
-- Bulvar en fazla 2 şerit/yöndür. Şerit değiştirme yalnızca aynı yol parçası içinde yapılır.
-  Dönüş için doğru şeride geçemeyen araç, durma çizgisinde son çare olarak yanlış şeritten döner.
-- Yol hücreleri ızgaraya bağlıdır (90° dönüşler). Su üzerinde köprü kurulabilir, ancak alt/üst geçit
-  (kavşaksız kesişme) yoktur: kesişen yollar her zaman kavşak oluşturur.
-- Ses efektleri Web Audio ile sentezlenir; müzik yoktur.
-- Performans hedefi (60 FPS) yalnızca headless Chromium'da yazılım (SwiftShader) render ile işlevsel
-  olarak denenmiştir; gerçek cihazlarda FPS ölçümü yapılmamıştır. Simülasyon tik süreleri ölçülmüştür
-  (bkz. ARCHITECTURE.md → Performans).
-- Mobil cihazlar yalnızca Playwright'ın Pixel 7 emülasyonunda test edilmiştir; gerçek cihazda test edilmemiştir.
-- Proje adı, logo ve marka uygunluğu araştırılmamıştır; ticari yayından önce ayrıca kontrol edilmelidir.
 
 ## Lisans
 

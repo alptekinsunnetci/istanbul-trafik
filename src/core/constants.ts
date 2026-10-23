@@ -86,7 +86,8 @@ export const JUNCTION = {
 } as const;
 
 /**
- * Traffic lights (demand-actuated, two phases: north–south and east–west).
+ * Traffic lights (demand-actuated: north–south and east–west, each followed
+ * by a protected left-turn phase when cars wait to turn left).
  * A green phase lasts at least `minGreen`; it ends early when its direction
  * has nobody waiting but the other one does, and at the latest after
  * `maxGreen`. Between phases the junction is all-red until the box is clear.
@@ -95,6 +96,9 @@ export const SIGNAL = {
   minGreen: 4,
   maxGreen: 14,
   clearance: 1.5,
+  /** Protected left-turn phase, only when cars are waiting to turn left. */
+  minLeft: 2.5,
+  maxLeft: 7,
 } as const;
 
 export const ROUTING = {
@@ -176,6 +180,31 @@ export const THROUGH = {
   firstDelay: 3,
 } as const;
 
+/**
+ * Little city life: gulls over open water (tap one for road pieces), horns
+ * in heavy jams (limited, never endless) and the metrobüs on the D-100/O-1.
+ */
+export const AMBIENCE = {
+  gullFirst: 30,
+  gullIntervalMin: 40,
+  gullIntervalMax: 80,
+  /** Seconds a gull stays before flying off. */
+  gullLife: 14,
+  gullSpeed: 7,
+  /** How often a flying gull calls, and how many times at most. */
+  gullCallEvery: 4.5,
+  gullCalls: 3,
+  gullReward: 2,
+  /** A queue this long (or a gridlock) counts as a heavy jam. */
+  hornQueue: 8,
+  /** Seconds between horn bursts, at most this many per jam, and calm time that ends a jam. */
+  hornGap: 7,
+  hornMaxPerJam: 3,
+  hornCalm: 15,
+  metrobusInterval: 30,
+  metrobusSpeed: 16,
+} as const;
+
 export const TIPS = {
   /** Queue length (vehicles) at which the traffic-light tip appears once. */
   queueForLight: 6,
@@ -210,7 +239,7 @@ export const MODES: Record<GameMode, ModeRules> = {
     text: 'Dengeli tempo',
     pinIntervalFactor: 1.25,
     overflowPins: 8,
-    overflowTime: 60,
+    overflowTime: 75,
     endless: false,
   },
   zor: {
@@ -247,6 +276,8 @@ export const GROWTH = {
   /** Chance that a new house / workplace appears across the water, so bridges are needed. */
   acrossWaterHouse: 0.3,
   acrossWaterWorkplace: 0.45,
+  /** ...but only from this week on, so the first week never needs a bridge. */
+  acrossWaterFromWeek: 2,
 } as const;
 
 export const ECONOMY = {
@@ -254,7 +285,7 @@ export const ECONOMY = {
   weekLength: 90,
   /** Road pieces granted at the start of every week. */
   weeklyRoads: 20,
-  startBridges: 4,
+  startBridges: 6,
   startBoulevards: 0,
   startLights: 2,
 } as const;
@@ -264,7 +295,7 @@ export type ResourceKind = 'roads' | 'bridges' | 'boulevards' | 'lights';
 /** Weekly reward options; two are offered at random each week. */
 export const UPGRADES: readonly { kind: ResourceKind; amount: number; label: string; text: string }[] = [
   { kind: 'roads', amount: 15, label: '+15 yol', text: 'Daha fazla yol parçası' },
-  { kind: 'bridges', amount: 5, label: '+5 köprü', text: 'Suyun üstünden geçmek için' },
+  { kind: 'bridges', amount: 5, label: '+5 köprü', text: 'Suyun ya da otoyolun üstünden geçmek için' },
   { kind: 'boulevards', amount: 10, label: '+10 bulvar', text: 'İki şeritli, hızlı yollar' },
   { kind: 'lights', amount: 2, label: '+2 trafik ışığı', text: 'Kalabalık kavşakları sırayla akıt' },
 ];

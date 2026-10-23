@@ -1,5 +1,6 @@
 import { DT, JUNCTION, SIGNAL } from '../core/constants';
 import type { Dir } from '../map/grid';
+import type { Turn } from '../map/road-graph';
 import { ZONE_COUNT } from './conflict-zones';
 
 export interface JunctionRequest {
@@ -23,6 +24,7 @@ export interface JunctionRequest {
   instant: boolean;
   /** Direction of travel when entering the junction (unset for spawns). */
   inDir?: Dir;
+  turn?: Turn;
 }
 
 /** 0: north–south traffic, 1: east–west traffic. */
@@ -31,7 +33,10 @@ export type SignalAxis = 0 | 1;
 export interface SignalState {
   /** Direction that has (or last had) green. */
   axis: SignalAxis;
-  phase: 'green' | 'clear';
+  /** `left`: protected phase for turning left (and right) on `axis`; `clear`: all red. */
+  phase: 'green' | 'left' | 'clear';
+  /** What follows the current all-red phase. */
+  after: 'left' | 'switch';
   /** Seconds in the current phase. */
   t: number;
 }
@@ -101,7 +106,8 @@ export class JunctionController {
   /** Sets the junctions that have traffic lights; lights that stay keep their phase. */
   setSignals(nodes: Iterable<number>): void {
     const next = new Map<number, SignalState>();
-    for (const n of nodes) next.set(n, this.signals.get(n) ?? { axis: 0, phase: 'green', t: 0 });
+    for (const n of nodes)
+      next.set(n, this.signals.get(n) ?? { axis: 0, phase: 'green', after: 'switch', t: 0 });
     this.signals = next;
   }
 
@@ -117,33 +123,60 @@ export class JunctionController {
   private allowed(req: JunctionRequest): boolean {
     const st = this.signals.get(req.node);
     if (!st) return true;
-    if (st.phase !== 'green') return false;
-    return req.inDir === undefined || axisOf(req.inDir) === st.axis;
+    if (st.phase === 'clear') return false;
+    if (req.inDir === undefined) return st.phase === 'green';
+    if (axisOf(req.inDir) !== st.axis) return false;
+    // In the protected phase only turning cars go; straight traffic waits.
+    return st.phase === 'green' || req.turn !== 'straight';
   }
 
   /** Advances every light by one step, using the requests waiting at it as detectors. */
   private advanceSignals(requests: readonly JunctionRequest[], dt: number): void {
     if (this.signals.size === 0) return;
-    const demand = new Map<number, [number, number]>();
+    // Per junction and axis: [all waiting, waiting to turn left].
+    const demand = new Map<number, [[number, number], [number, number]]>();
     for (const r of requests) {
       if (r.inDir === undefined || !this.signals.has(r.node)) continue;
-      const d = demand.get(r.node) ?? [0, 0];
-      d[axisOf(r.inDir)]++;
+      const d = demand.get(r.node) ?? [
+        [0, 0],
+        [0, 0],
+      ];
+      const a = d[axisOf(r.inDir)];
+      a[0]++;
+      if (r.turn === 'left') a[1]++;
       demand.set(r.node, d);
     }
     for (const [node, st] of this.signals) {
       st.t += dt;
-      const d = demand.get(node) ?? [0, 0];
+      const d = demand.get(node) ?? [
+        [0, 0],
+        [0, 0],
+      ];
+      const own = d[st.axis];
       const other = (1 - st.axis) as SignalAxis;
+      const waitingOther = d[other][0] > 0;
       if (st.phase === 'green') {
-        const waitingOther = d[other] > 0;
-        if (waitingOther && (st.t >= SIGNAL.maxGreen || (st.t >= SIGNAL.minGreen && d[st.axis] === 0))) {
+        const ownLeft = own[1] > 0;
+        const ownStraight = own[0] - own[1];
+        const someoneElse = waitingOther || ownLeft;
+        if (someoneElse && (st.t >= SIGNAL.maxGreen || (st.t >= SIGNAL.minGreen && ownStraight === 0))) {
+          // Cars still waiting to turn left get their own protected phase next.
+          st.after = ownLeft ? 'left' : 'switch';
+          st.phase = 'clear';
+          st.t = 0;
+        }
+      } else if (st.phase === 'left') {
+        if (st.t >= SIGNAL.maxLeft || (st.t >= SIGNAL.minLeft && own[1] === 0)) {
+          st.after = 'switch';
           st.phase = 'clear';
           st.t = 0;
         }
       } else if (st.t >= SIGNAL.clearance && !this.isBusy(node)) {
-        st.axis = other;
-        st.phase = 'green';
+        if (st.after === 'left') st.phase = 'left';
+        else {
+          st.axis = other;
+          st.phase = 'green';
+        }
         st.t = 0;
       }
     }

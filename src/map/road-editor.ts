@@ -21,6 +21,8 @@ export interface EditResult {
 export interface PreviewCell {
   cell: number;
   valid: boolean;
+  /** The street crosses a highway here on an overpass (uses a bridge piece). */
+  overpass?: boolean;
 }
 
 export interface StrokePreview {
@@ -32,6 +34,10 @@ export interface StrokePreview {
 /** Pieces that a road cell occupies (returned when it is erased). */
 export function cellPieces(grid: Grid, i: number): Resources {
   const r = noResources();
+  if (grid.overpass[i] === 1) {
+    r.bridges = 1;
+    return r;
+  }
   if (!grid.isRoad(i) || grid.locked[i] === 1) return r;
   if (grid.signal[i] === 1) r.lights = 1;
   if (grid.isBridge(i)) r.bridges = 1;
@@ -133,17 +139,46 @@ function buildBlockReason(grid: Grid, i: number): string | null {
 }
 
 /**
+ * True when the stroke runs straight across a plain highway cell (one that is
+ * not a junction yet): that crossing becomes an overpass instead of a junction.
+ */
+function crossesHighway(grid: Grid, stroke: readonly number[], k: number): boolean {
+  const c = stroke[k] as number;
+  const a = stroke[k - 1];
+  const b = stroke[k + 1];
+  if (a === undefined || b === undefined || !grid.isHighway(c) || grid.overpass[c] === 1) return false;
+  if (grid.isHighway(a) || grid.isHighway(b) || grid.degree(c) !== 2) return false;
+  const d1 = stepDir(grid, a, c);
+  const d2 = stepDir(grid, c, b);
+  // Straight through, across the highway (which runs along the other axis).
+  return d1 !== null && d1 === d2 && !grid.connected(c, d1) && !grid.connected(c, opposite(d1));
+}
+
+/**
  * Validates a road stroke. New land cells use a road piece, new water cells
- * use a bridge piece; the stroke is valid up to the first blocked cell.
+ * use a bridge piece, and so does crossing a highway on an overpass; the
+ * stroke is valid up to the first blocked cell. Without a bridge piece left,
+ * a highway crossing becomes an ordinary junction.
  */
 export function previewBuild(grid: Grid, stroke: readonly number[], budget: Resources): StrokePreview {
   const cells: PreviewCell[] = [];
   const spent = noResources();
   let message: string | undefined;
   let blocked = false;
-  for (const c of stroke) {
+  for (let k = 0; k < stroke.length; k++) {
+    const c = stroke[k] as number;
     if (blocked) {
       cells.push({ cell: c, valid: false });
+      continue;
+    }
+    if (crossesHighway(grid, stroke, k)) {
+      if (spent.bridges + 1 <= budget.bridges) {
+        spent.bridges++;
+        cells.push({ cell: c, valid: true, overpass: true });
+      } else {
+        message ??= 'Köprü parçası yok: otoyolla kavşak yapılacak';
+        cells.push({ cell: c, valid: true });
+      }
       continue;
     }
     const reason = buildBlockReason(grid, c);
@@ -169,6 +204,10 @@ export function buildRoad(grid: Grid, stroke: readonly number[], budget: Resourc
   for (const p of preview.cells) {
     if (!p.valid) break;
     const c = p.cell;
+    if (p.overpass) {
+      grid.overpass[c] = 1;
+      changed++;
+    }
     if (!grid.isRoad(c)) {
       grid.road[c] = 1;
       grid.lanes[c] = 1;
@@ -198,6 +237,19 @@ export function previewErase(grid: Grid, stroke: readonly number[]): StrokePrevi
   return { cells, spent };
 }
 
+/** Takes the street off an overpass (the highway below stays) and returns its bridge piece. */
+function removeOverpass(grid: Grid, c: number, spent: Resources): void {
+  if (grid.overpass[c] !== 1) return;
+  grid.overpass[c] = 0;
+  spent.bridges--;
+  for (const d of [0, 1, 2, 3] as const) {
+    const n = grid.neighbor(c, d);
+    if (n < 0 || grid.isHighway(n)) continue;
+    grid.setLink(c, d, false);
+    grid.setLink(n, opposite(d), false);
+  }
+}
+
 export function eraseRoad(grid: Grid, stroke: readonly number[]): EditResult {
   const spent = noResources();
   let changed = 0;
@@ -205,6 +257,11 @@ export function eraseRoad(grid: Grid, stroke: readonly number[]): EditResult {
   let highwayHit = false;
   for (const c of new Set(stroke)) {
     if (!grid.isRoad(c)) continue;
+    if (grid.overpass[c] === 1) {
+      removeOverpass(grid, c, spent);
+      changed++;
+      continue;
+    }
     if (grid.locked[c] === 1) {
       lockedHit = true;
       if (grid.isHighway(c)) highwayHit = true;
@@ -213,7 +270,10 @@ export function eraseRoad(grid: Grid, stroke: readonly number[]): EditResult {
     addTo(spent, cellPieces(grid, c), -1);
     for (const d of [0, 1, 2, 3] as const) {
       const n = grid.neighbor(c, d);
-      if (n >= 0) grid.setLink(n, opposite(d), false);
+      if (n < 0) continue;
+      // An overpass that loses one of its ends goes with it.
+      if (grid.overpass[n] === 1) removeOverpass(grid, n, spent);
+      grid.setLink(n, opposite(d), false);
     }
     grid.links[c] = 0;
     grid.road[c] = 0;
@@ -315,7 +375,7 @@ export function toggleSignal(grid: Grid, stroke: readonly number[], budget: Reso
     grid.touch();
     return { ok: true, spent, changed: 1, message: 'Trafik ışığı kaldırıldı' };
   }
-  if (grid.degree(c) < 3)
+  if (grid.degree(c) < 3 || grid.overpass[c] === 1)
     return { ok: false, spent, changed: 0, message: 'Trafik ışığı yalnızca kavşağa konur' };
   if (budget.lights < 1) return { ok: false, spent, changed: 0, message: 'Trafik ışığı kalmadı' };
   grid.signal[c] = 1;

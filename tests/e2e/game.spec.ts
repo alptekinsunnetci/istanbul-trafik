@@ -83,7 +83,20 @@ test.afterEach(() => {
 test('opens the main menu and lists Istanbul districts', async ({ page }) => {
   await page.goto('./?e2e');
   await expect(page).toHaveTitle('İstanbul Trafik');
-  for (const name of ['Kadıköy', 'Beşiktaş', 'Üsküdar', 'Fatih', 'Şişli', 'Bakırköy']) {
+  for (const name of [
+    'Beşiktaş',
+    'Kadıköy',
+    'Sarıyer',
+    'Şişli',
+    'Bakırköy',
+    'Beykoz',
+    'Üsküdar',
+    'Beyoğlu',
+    'Başakşehir',
+    'Maltepe',
+    'Fatih',
+    'Bağcılar',
+  ]) {
     await expect(page.locator('.district-card', { hasText: name })).toBeVisible();
   }
   await page.screenshot({ path: 'test-results/screens/01-menu.png' });
@@ -278,7 +291,7 @@ test('guided tutorial: connect the highlighted house, then the others', async ({
   await page.goto('./?e2e');
   await page.locator('#btn-tutorial').click();
   await expect(page.locator('#coach')).toBeVisible();
-  await expect(page.locator('#coach')).toContainText('1/4');
+  await expect(page.locator('#coach')).toContainText('1/7');
   let s = await state(page);
   expect(s.app).toBe('ready'); // the clock waits for the first road
   expect(s.mode).toBe('rahat');
@@ -288,14 +301,19 @@ test('guided tutorial: connect the highlighted house, then the others', async ({
   const work = pair[pair.length - 1]!;
   await page.screenshot({ path: 'test-results/screens/10-tutorial.png' });
   await drawBetween(page, pair[0]!, work);
-  await expect(page.locator('#coach')).toContainText('2/4');
+  await expect(page.locator('#coach')).toContainText('2/7');
   s = await state(page);
   expect(s.app).toBe('playing');
   await page.locator('#btn-speed').click();
   await page.locator('#btn-speed').click();
-  await expect(page.locator('#coach')).toContainText('3/4', { timeout: 60_000 });
+  await expect(page.locator('#coach')).toContainText('3/7', { timeout: 60_000 });
   for (const house of pair.slice(1, -1)) await drawBetween(page, house, work);
-  await expect(page.locator('#coach')).toContainText('4/4');
+  await expect(page.locator('#coach')).toContainText('4/7');
+  // Undo/erase, traffic lights, highways, bridges: each can be read and skipped.
+  for (const step of ['5/7', '6/7', '7/7']) {
+    await page.locator('#btn-coach-next').click();
+    await expect(page.locator('#coach')).toContainText(step);
+  }
   await page.locator('#btn-coach-next').click();
   await expect(page.locator('#coach')).toBeHidden();
   expect((await state(page)).tutorialStep).toBe(0);

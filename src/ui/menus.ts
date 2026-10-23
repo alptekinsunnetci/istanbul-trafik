@@ -4,6 +4,7 @@ import { DIFFICULTY_LABELS, DISTRICTS, type District } from '../map/districts';
 import { Terrain } from '../map/grid';
 import { createDistrictGrid } from '../map/map-generator';
 import { type Records, bestScoreKey } from '../persistence/save-schema';
+import { SEASONS, seasonOf } from '../rendering/theme';
 import { Modal } from './accessibility';
 import { button, formatNumber, formatPercent, formatTime, h, icon } from './dom';
 
@@ -312,7 +313,10 @@ export function helpContent(): HTMLElement {
         text: 'D-100, O-1 gibi hazır otoyollar hızlıdır ve silinemez; üstlerinden şehir dışına giden gri araçlar akar. Yolunu otoyola bağlayabilirsin ama oluşan kavşak geçen trafiği de yavaşlatır.',
       }),
       h('li', {
-        text: 'Dere, Haliç ya da Boğaz’ın karşı kıyısında da binalar çıkar: oraya köprüyle ulaşırsın.',
+        text: 'Dere, Haliç ya da Boğaz’ın karşı kıyısında da binalar çıkar: oraya köprüyle ulaşırsın. Otoyolun üstünden düz geçen yol üst geçit olur.',
+      }),
+      h('li', {
+        text: 'Suyun üstünde ara sıra bir martı uçar: üstüne dokunursan +2 yol parçası kazanırsın.',
       }),
     ),
     table,
@@ -333,7 +337,12 @@ export function upgradeDialog(
   options: readonly { kind: string; label: string; text: string }[],
   choose: (index: number) => void,
 ): Modal {
-  const modal = new Modal(`${week}. hafta başladı`, false, () => undefined, 'dialog-upgrade');
+  const modal = new Modal(
+    `${week}. hafta başladı · ${SEASONS[seasonOf(week)] ?? ''}`,
+    false,
+    () => undefined,
+    'dialog-upgrade',
+  );
   modal.panel.id = 'upgrade-dialog';
   const cards = h('div', { class: 'upgrade-cards' });
   options.forEach((o, i) => {

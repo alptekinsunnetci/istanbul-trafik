@@ -6,6 +6,9 @@ import {
   MODES,
   type ModeRules,
   PLAYFIELD,
+  AMBIENCE,
+  DT,
+  GEOM,
   type ResourceKind,
   TIPS,
   UPGRADES,
@@ -69,6 +72,22 @@ export interface SessionEvents {
   buildingAdded: number;
   networkChanged: undefined;
   boundsChanged: Bounds;
+  /** A gull appeared, or a flying gull calls. */
+  gullCall: undefined;
+  /** The player caught a gull (world position) and got road pieces. */
+  gullCaught: { x: number; y: number; roads: number };
+  /** Drivers stuck in a heavy jam honk. */
+  horn: undefined;
+}
+
+/** A gull flying over open water, in world metres. */
+export interface Gull {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number;
+  calls: number;
 }
 
 export interface SessionInit {
@@ -87,6 +106,7 @@ interface RoadSnapshot {
   lanes: Uint8Array;
   locked: Uint8Array;
   signal: Uint8Array;
+  overpass: Uint8Array;
   /** Entrance cell and side of every building at snapshot time. */
   doors: Map<number, [number, Dir]>;
   resources: Resources;
@@ -140,11 +160,20 @@ export class GameSession {
   pendingUpgrades: Upgrade[] | null = null;
   summary: GameSummary | null = null;
   private undoStack: RoadSnapshot[] = [];
+  /** The gull currently flying, if any. */
+  gull: Gull | null = null;
+  private nextGullAt: number = AMBIENCE.gullFirst;
+  private readonly ambienceRng: Random;
+  /** Open-water cells (water all around), where gulls fly. */
+  private readonly openWater: number[] = [];
+  private hornBursts = 0;
+  private nextHornAt = 0;
+  private calmSince = 0;
   private lightTipShown = false;
   /** Separate pieces of dry ground; buildings on different pieces need a bridge. */
   private readonly regions: Int32Array;
-  /** Districts without water never offer bridges. */
-  readonly hasWater: boolean;
+  /** Bridges cross water and highways (overpasses); a map with neither never offers them. */
+  readonly usesBridges: boolean;
   private unsubscribers: (() => void)[] = [];
 
   constructor(init: SessionInit) {
@@ -165,8 +194,17 @@ export class GameSession {
     );
     const buildings = generateInitialBuildings(grid, district, mapRng, this.bounds);
     this.regions = landRegions(grid);
-    this.hasWater = grid.terrain.some((t) => t === Terrain.Water);
+    this.usesBridges = grid.terrain.some((t) => t === Terrain.Water) || district.highways.length > 0;
+    for (let i = 0; i < grid.size; i++) {
+      if (grid.terrain[i] !== Terrain.Water) continue;
+      const open = DIRS.every((d) => {
+        const n = grid.neighbor(i, d);
+        return n < 0 || grid.terrain[n] === Terrain.Water;
+      });
+      if (open) this.openWater.push(i);
+    }
     this.growthRng = new Random(hashString(`growth:${district.id}:${this.seed}`));
+    this.ambienceRng = new Random(hashString(`ambience:${district.id}:${this.seed}`));
     this.sim = new Simulation(grid, buildings, {
       seed: this.seed,
       demandMultiplier: district.demandMultiplier / this.rules.pinIntervalFactor,
@@ -174,12 +212,79 @@ export class GameSession {
     });
     this.resources = {
       roads: district.startRoads,
-      bridges: this.hasWater ? ECONOMY.startBridges : 0,
+      bridges: this.usesBridges ? ECONOMY.startBridges : 0,
       boulevards: ECONOMY.startBoulevards,
       lights: ECONOMY.startLights,
     };
     this.unsubscribers.push(this.sim.events.on('tripCompleted', () => this.score.onCompleted()));
     this.unsubscribers.push(this.sim.events.on('gridlock', () => this.lightTip(true)));
+  }
+
+  /** Gulls: now and then one flies over open water near the playable area and calls. */
+  private updateGull(): void {
+    const time = this.sim.time;
+    const g = this.gull;
+    if (g) {
+      g.age += DT;
+      g.x += g.vx * DT;
+      g.y += g.vy * DT;
+      if (g.calls < AMBIENCE.gullCalls && g.age >= g.calls * AMBIENCE.gullCallEvery) {
+        g.calls++;
+        this.events.emit('gullCall', undefined);
+      }
+      if (g.age >= AMBIENCE.gullLife) this.gull = null;
+      return;
+    }
+    if (time < this.nextGullAt) return;
+    const rng = this.ambienceRng;
+    this.nextGullAt = time + rng.range(AMBIENCE.gullIntervalMin, AMBIENCE.gullIntervalMax);
+    const grid = this.sim.grid;
+    const b = this.bounds;
+    const near = this.openWater.filter((c) => {
+      const x = grid.cx(c);
+      const y = grid.cy(c);
+      return x >= b.x0 - 2 && x <= b.x1 + 2 && y >= b.y0 - 2 && y <= b.y1 + 2;
+    });
+    if (near.length === 0) return;
+    const c = rng.pick(near);
+    const angle = rng.range(0, Math.PI * 2);
+    const C = GEOM.cellSize;
+    this.gull = {
+      x: (grid.cx(c) + 0.5) * C,
+      y: (grid.cy(c) + 0.5) * C,
+      vx: Math.cos(angle) * AMBIENCE.gullSpeed,
+      vy: Math.sin(angle) * AMBIENCE.gullSpeed,
+      age: 0,
+      calls: 0,
+    };
+  }
+
+  /** Catching the gull gives road pieces; returns false when there is none (any more). */
+  catchGull(): boolean {
+    const g = this.gull;
+    if (!g || !this.editable) return false;
+    this.gull = null;
+    this.resources.roads += AMBIENCE.gullReward;
+    this.events.emit('gullCaught', { x: g.x, y: g.y, roads: AMBIENCE.gullReward });
+    return true;
+  }
+
+  /**
+   * Horns in a heavy jam: a few bursts with pauses in between, then silence
+   * until the traffic has been calm for a while.
+   */
+  private updateHorns(): void {
+    const time = this.sim.time;
+    const jam = this.sim.gridlocks.length > 0 || this.sim.queues.snapshot.longestQueue >= AMBIENCE.hornQueue;
+    if (!jam) {
+      if (time - this.calmSince >= AMBIENCE.hornCalm) this.hornBursts = 0;
+      return;
+    }
+    this.calmSince = time;
+    if (this.hornBursts >= AMBIENCE.hornMaxPerJam || time < this.nextHornAt) return;
+    this.hornBursts++;
+    this.nextHornAt = time + AMBIENCE.hornGap + this.ambienceRng.range(0, 3);
+    this.events.emit('horn', undefined);
   }
 
   /** Shown once per game, when a junction gets crowded and a light could help. */
@@ -219,6 +324,8 @@ export class GameSession {
 
     if (this.sim.tick % 20 === 0 && this.sim.queues.snapshot.longestQueue >= TIPS.queueForLight)
       this.lightTip(false);
+    this.updateGull();
+    if (this.sim.tick % 20 === 0) this.updateHorns();
 
     if (time >= this.nextGrowthAt) {
       this.growCity();
@@ -240,7 +347,7 @@ export class GameSession {
     if (GROWTH.newColorWeeks.includes(week) && this.colors < GROWTH.maxColors) {
       this.introduceColor();
     }
-    const pool = UPGRADES.filter((u) => this.hasWater || u.kind !== 'bridges');
+    const pool = UPGRADES.filter((u) => this.usesBridges || u.kind !== 'bridges');
     const first = pool.splice(this.growthRng.int(0, pool.length - 1), 1)[0] as Upgrade;
     const second = pool[this.growthRng.int(0, pool.length - 1)] as Upgrade;
     this.pendingUpgrades = [first, second];
@@ -334,7 +441,10 @@ export class GameSession {
     const work = this.addBuilding('ticari', color, c, 5, 14);
     if (!work) return;
     const anchor: [number, number] = [work.x + 1, work.y + 1];
-    this.addBuilding('konut', color, anchor, 4, 9);
+    // The first house of a new colour stands on the same bank as its workplace.
+    const g = this.sim.grid;
+    const bank = this.regions[g.idx(work.x, work.y)];
+    this.addBuilding('konut', color, anchor, 4, 9, (x, y) => this.regions[g.idx(x, y)] === bank);
     this.settle();
     this.events.emit('newColor', color);
     this.events.emit('buildingAdded', work.id);
@@ -350,7 +460,10 @@ export class GameSession {
       const color = this.growthRng.int(0, this.colors - 1);
       const sameColor = workplaces.filter((w) => w.color === color);
       const anchor = this.growthRng.pick(sameColor.length > 0 ? sameColor : workplaces);
-      const across = this.growthRng.next() < GROWTH.acrossWaterWorkplace ? this.acrossWater(anchor) : null;
+      const across =
+        this.week >= GROWTH.acrossWaterFromWeek && this.growthRng.next() < GROWTH.acrossWaterWorkplace
+          ? this.acrossWater(anchor)
+          : null;
       b =
         (across && this.addBuilding('ticari', color, [anchor.x, anchor.y], 6, 14, across)) ||
         this.addBuilding('ticari', color, [anchor.x, anchor.y], 6, 12);
@@ -372,7 +485,10 @@ export class GameSession {
       const city = sim.buildings.filter((x) => x.kind !== 'kapi');
       const sameColor = city.filter((x) => x.color === bestColor);
       const anchor = this.growthRng.pick(sameColor.length > 0 ? sameColor : city);
-      const across = this.growthRng.next() < GROWTH.acrossWaterHouse ? this.acrossWater(anchor) : null;
+      const across =
+        this.week >= GROWTH.acrossWaterFromWeek && this.growthRng.next() < GROWTH.acrossWaterHouse
+          ? this.acrossWater(anchor)
+          : null;
       b =
         (across && this.addBuilding('konut', bestColor, [anchor.x, anchor.y], 3, 12, across)) ||
         this.addBuilding('konut', bestColor, [anchor.x, anchor.y], 3, 8);
@@ -630,6 +746,7 @@ export class GameSession {
     g.lanes.set(snap.lanes);
     g.locked.set(snap.locked);
     g.signal.set(snap.signal);
+    g.overpass.set(snap.overpass);
     for (const b of this.sim.buildings) {
       const door = snap.doors.get(b.id);
       if (door) {
@@ -658,6 +775,7 @@ export class GameSession {
       lanes: g.lanes.slice(),
       locked: g.locked.slice(),
       signal: g.signal.slice(),
+      overpass: g.overpass.slice(),
       doors: new Map(this.sim.buildings.map((b) => [b.id, [b.door, b.doorDir] as [number, Dir]])),
       resources: { ...this.resources },
     };

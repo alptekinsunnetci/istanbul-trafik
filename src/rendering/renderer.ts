@@ -3,11 +3,12 @@ import { GEOM } from '../core/constants';
 import type { GameSession } from '../gameplay/game-session';
 import type { PreviewCell } from '../map/road-editor';
 import { drawBuildingStatus, drawBuildings } from './building-renderer';
+import { Ambience } from './ambience';
 import { Camera } from './camera';
 import { drawGridlocks, drawHover, drawPreview, drawSelection, drawSignals, drawTraffic } from './effects';
 import { drawTerrain, placeHighwaySigns, placeLabels } from './map-renderer';
 import { drawRoads } from './road-renderer';
-import { DEFAULT_THEME, HIGH_CONTRAST_THEME, type Theme, districtTheme, groupColor } from './theme';
+import { DEFAULT_THEME, HIGH_CONTRAST_THEME, type Theme, districtTheme, groupColor, seasonOf } from './theme';
 import { PathCache, VehicleRenderer } from './vehicle-renderer';
 
 export interface RenderOptions {
@@ -39,6 +40,7 @@ export class Renderer {
   private readonly selection = new Graphics();
   private readonly gridlocks = new Graphics();
   private readonly lights = new Graphics();
+  private readonly ambience = new Ambience();
   private readonly outside = new Graphics();
   private readonly hint = new Graphics();
   private readonly popups = new Container();
@@ -50,6 +52,8 @@ export class Renderer {
   private session: GameSession | null = null;
   private paths: PathCache | null = null;
   private theme: Theme = DEFAULT_THEME;
+  /** Season the map is currently drawn in (changes every week). */
+  private season = -1;
   private options: RenderOptions = { highContrast: false, showGrid: true, reduceMotion: false };
   private overlayTimer = 0;
   private time = 0;
@@ -79,6 +83,7 @@ export class Renderer {
       this.status,
       this.outside,
       this.vehicles.container,
+      this.ambience.container,
       this.lights,
       this.selection,
       this.gridlocks,
@@ -127,16 +132,18 @@ export class Renderer {
     if (this.session && (themeChanged || gridChanged)) this.redrawStatic();
   }
 
-  /** The base theme, tinted with the current district's ground and water colours. */
+  /** The base theme, tinted with the current district's ground and water colours and the season. */
   private applyTheme(): void {
     const base = this.options.highContrast ? HIGH_CONTRAST_THEME : DEFAULT_THEME;
-    this.theme = districtTheme(base, this.session?.district.palette);
+    this.season = seasonOf(this.session?.week ?? 1);
+    this.theme = districtTheme(base, this.session?.district.palette, this.season);
     this.app.renderer.background.color = this.theme.background;
   }
 
   setSession(session: GameSession | null): void {
     this.session = session;
     this.applyTheme();
+    this.ambience.setSession(session, this.theme);
     this.vehicles.clear();
     this.selectedVehicle = null;
     this.selectedBuilding = null;
@@ -257,21 +264,22 @@ export class Renderer {
     if (!s) return;
     for (const p of placeLabels(s.sim.grid, s.district.labels, s.bounds)) {
       const water = p.kind === 'water';
+      const big = water && !p.river;
       const text = new Text({
         text: p.text,
         style: {
           fontFamily: 'system-ui, sans-serif',
-          fontSize: water ? 9 : 6,
+          fontSize: big ? 9 : p.river ? 5 : 6,
           fontWeight: '700',
-          letterSpacing: water ? 3.5 : 1.5,
+          letterSpacing: big ? 3.5 : 1.2,
           fill: water ? this.theme.waterLabel : this.theme.parkLabel,
         },
         resolution: 4,
       });
       text.anchor.set(0.5);
       text.position.set(p.x, p.y);
-      text.alpha = water ? 0.75 : 0.85;
-      if (p.vertical) text.rotation = -Math.PI / 2;
+      text.alpha = water ? 0.8 : 0.85;
+      text.rotation = p.angle;
       this.labels.addChild(text);
     }
   }
@@ -336,10 +344,15 @@ export class Renderer {
 
   /** Floating "+1" above a building after a delivery. */
   popScore(buildingId: number): void {
-    const s = this.session;
-    const b = s?.sim.buildingById(buildingId);
-    if (!b || this.options.reduceMotion) return;
+    const b = this.session?.sim.buildingById(buildingId);
+    if (!b) return;
     const C = GEOM.cellSize;
+    this.popText((b.x + b.w / 2) * C, b.y * C - 4, '+1');
+  }
+
+  /** A short floating text at a world position (e.g. "+1", "+2 yol"). */
+  popText(x: number, y: number, label: string): void {
+    if (this.options.reduceMotion) return;
     const text =
       this.popupPool.pop() ??
       new Text({
@@ -354,7 +367,8 @@ export class Renderer {
         resolution: 4,
       });
     text.anchor.set(0.5);
-    text.position.set((b.x + b.w / 2) * C, b.y * C - 4);
+    text.text = label;
+    text.position.set(x, y);
     text.alpha = 1;
     this.popups.addChild(text);
     this.activePopups.push({ text, age: 0 });
@@ -433,6 +447,11 @@ export class Renderer {
   }
 
   render(alpha: number, frameSeconds: number): void {
+    // A new week brings a new season: repaint the map.
+    if (this.session && seasonOf(this.session.week) !== this.season) {
+      this.applyTheme();
+      this.redrawStatic();
+    }
     const s = this.session;
     this.time += frameSeconds;
     this.updateCamera(frameSeconds);
@@ -441,6 +460,7 @@ export class Renderer {
     this.world.scale.set(this.camera.scale);
     if (s && this.paths) {
       this.vehicles.update(alpha);
+      this.ambience.update(frameSeconds, this.options.reduceMotion);
       const pulse = this.options.reduceMotion ? 0.5 : 0.5 + 0.5 * Math.sin(this.time * 4);
       this.overlayTimer -= frameSeconds;
       if (this.overlayTimer <= 0) {
@@ -511,6 +531,15 @@ export class Renderer {
     const rect = this.canvas.getBoundingClientRect();
     const w = this.camera.toWorld(clientX - rect.left, clientY - rect.top);
     return this.vehicles.pick(w.x, w.y, Math.max(5, 14 / this.camera.scale));
+  }
+
+  /** True when a client point is on (or right next to) the flying gull. */
+  pickGull(clientX: number, clientY: number): boolean {
+    const g = this.ambience.gullAt();
+    if (!g) return false;
+    const rect = this.canvas.getBoundingClientRect();
+    const w = this.camera.toWorld(clientX - rect.left, clientY - rect.top);
+    return Math.hypot(w.x - g.x, w.y - g.y) <= Math.max(9, 24 / this.camera.scale);
   }
 
   get visibleVehicles(): number {

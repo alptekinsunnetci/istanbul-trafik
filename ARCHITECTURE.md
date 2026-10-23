@@ -86,14 +86,21 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
 - **Yol verme:** Işıksız ve en az üç kollu bir kavşakta, çapraz yoldan 30 m içinde araç varsa (ya da
   kutuda çapraz yönden bir araç varsa) araç ancak durma çizgisine 5 m kala ve 3 m/sn altına yavaşlayınca
   rezervasyon isteyebilir (`JUNCTION.yield*`). Çapraz trafik yoksa hızını korur. Otoyol kavşaklarında
-  ana yol önceliklidir: otoyoldaki araçlar hiç yol vermez, yan sokaktan gelen araç ise yakında herhangi
-  bir araç varsa yol verir. Haritada bu kavşaklar sokağın otoyola kavisli bordürlerle açıldığı bir ağız
-  ve kenar çizgisinde boşlukla çizilir.
+  ana yol önceliklidir: otoyoldaki araçlar hiç yol vermez. Yan sokaktan sağa dönüp katılan araç (rampa)
+  yalnızca katılacağı yönde otoyolda araç yaklaşırken yol verir; karşıya geçen ya da sola dönen araç
+  yakındaki her araca yol verir. Haritada bu kavşaklar sokağın otoyola kavisli bordürlerle açıldığı bir
+  ağız, iki yanda katılma/ayrılma şeridi gibi açılan kenar çizgisi ve kenar çizgisinde boşlukla çizilir.
+- **Üst geçit** (`grid.overpass`): Otoyolun düz, kavşaksız bir hücresini dik ve düz kesen çizim o hücreyi
+  üst geçit yapar (1 köprü parçası; parça yoksa sıradan kavşak olur). Topolojide bu hücre düğüm değildir:
+  her iki yol hücreden düz geçer, iki ayrı kenar zincirine aittir ve araçlar birbirini hiç beklemez.
+  Silgi üst geçidi kaldırır (otoyol kalır, köprü geri gelir); bir ucunun sokağı silinirse üst geçit de
+  kalkar. Otoyol hücreleri artık yalnızca kavşakta ya da şehir dışı kapısının yanında düğümdür.
 - **İpucu:** Bir kavşak kilitlenince ya da kuyruk 6 araca ulaşınca, oyuncunun ışığı ve ışıksız bir
   kavşağı varsa, oyun başına bir kez trafik ışığı önerilir.
-- **Trafik ışığı** (`grid.signal`, `SIGNAL`): Talebe duyarlı iki fazlı ışık. Kuzey–güney ve doğu–batı
-  yönleri sırayla yeşil yanar. Yeşil en az 4 sn sürer; o yönde bekleyen yoksa ve diğer yönde varsa erken,
-  en geç 14 sn sonra biter. Fazlar arasında kutu boşalana kadar (en az 1,5 sn) her yön kırmızıdır.
+- **Trafik ışığı** (`grid.signal`, `SIGNAL`): Talebe duyarlı ışık. Kuzey–güney ve doğu–batı yönleri
+  sırayla yeşil yanar. Yeşil en az 4 sn sürer; o yönde düz giden kalmadıysa ve başkası bekliyorsa erken,
+  en geç 14 sn sonra biter. Yeşil bittiğinde o yönde sola dönmeyi bekleyen varsa, kısa bir tümü-kırmızıdan
+  sonra yalnızca dönen araçların geçtiği korumalı sola dönüş fazı gelir (2,5–7 sn). Fazlar arasında kutu boşalana kadar (en az 1,5 sn) her yön kırmızıdır.
   Dedektör olarak o adımın rezervasyon istekleri kullanılır. Kırmızıdaki istekler hiç değerlendirilmez
   (başkasını da engellemez). Yoğun dört yönlü bir kavşakta ölçüm: 100 araç ışıksız 274 sn, ışıklı 232 sn
   (testte ışığın daha hızlı olduğu doğrulanır).
@@ -138,6 +145,40 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
   oyuncu istatistiklerine sayılmaz; otoyol tıkalıyken giremeyen araçlar birikmez, düşer.
 - **Köprü olmayan ilçe:** Suyu olmayan haritada köprü parçası verilmez ve ödül olarak çıkmaz.
 
+## Denge
+
+`npm run bench`, performans testinin yanında basit bir **denge botu** (`tests/perf/bot.ts`) çalıştırır. Bot
+her 2 sn'de bir, kendi renginde iş yerine ulaşamayan evleri ve hiçbir evin ulaşamadığı iş yerlerini en
+yakın uygun binaya bağlar (önce kuru yoldan, yoksa köprüyle), kalabalık bir kavşağa ışık koyar ve
+ödülleri ihtiyaca göre seçer. Her ilçe, her modda aynı tohumla (11) en çok 1500 sn oynanır.
+
+Son ölçüm (bot, insan oyuncudan zayıftır; süreler oyunun bittiği saniyedir):
+
+| Mod    | En kısa        | En uzun        | Not                                         |
+| ------ | -------------- | -------------- | ------------------------------------------- |
+| Rahat  | 1500 (hepsi)   | 1500           | Oyun bitmez; skor 570–1940                  |
+| Normal | 426 (Beşiktaş) | 897 (Beykoz)   | 12 ilçenin 9'u 530 sn'nin üstünde           |
+| Zor    | 213 (Beykoz)   | 709 (Bakırköy) | Tek tohumla ölçüldüğü için dağılım geniştir |
+
+Bu ölçümlere göre yapılan ayarlar: Normal modda taşma süresi 60 → 75 sn; başlangıç köprüsü 4 → 6
+(köprüler üst geçitte de kullanılır); ilk mahalle ve her yeni rengin ilk evi iş yeriyle aynı kıyıda
+kurulur; karşı kıyıda bina 2. haftadan önce çıkmaz; Bakırköy'de Ayamama Deresi biraz doğuya alındı.
+
+## Şehir hayatı
+
+- **Martılar** (`GameSession.gull`, `AMBIENCE`): İlk martı 30. saniyede, sonra 40–80 sn aralıklarla, oyun
+  alanının yakınındaki açık suyun (dört yanı su olan hücreler) üstünde belirir, rastgele bir yönde 7 m/sn
+  uçar ve 14 sn sonra gider. Uçarken en fazla üç kez öter (`gullCall`). Oyuncu ona dokunursa
+  (`catchGull`) +2 yol parçası alır ve martı kaybolur. Rastgelelik ayrı bir tohumdan gelir; trafik
+  simülasyonunu etkilemez. Açık suyu olmayan ilçede (Bağcılar) martı çıkmaz.
+- **Kornalar:** Kilitlenme varken ya da en uzun kuyruk 8 araca ulaşınca bir "sıkışıklık" başlar. Her
+  sıkışıklıkta en fazla 3 korna çalar, aralarında en az 7 sn olur. Trafik 15 sn sakin kalınca sayaç
+  sıfırlanır. Böylece sesler hiçbir zaman sürekli çalmaz.
+- **Metrobüs** (`Ambience`, `metrobusRoutes`): Yalnızca görseldir. 30 sn'de bir D-100 ya da O-1'in orta
+  şeridinde harita dışından girip diğer uçtan çıkar (16 m/sn). Simülasyon zamanıyla ilerler, oyun
+  duraklayınca durur; trafikle etkileşmez, tıpkı gerçek metrobüsün ayrı yolu gibi.
+- Sesler (martı, korna, ödül) Web Audio ile sentezlenir; ses dosyası yoktur.
+
 ## Kolaylık ve erişilebilirlik
 
 - **Modlar** (`MODES`): Rahat (talep 1,7 kat seyrek, taşma oyunu bitirmez), Normal (1,25 kat, 8 raptiye,
@@ -152,8 +193,9 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
   hücreler bina ve parkların etrafından dolaşılarak doldurulur.
 - **Geri al:** Her çizimden önce yol katmanları ve parçalar saklanır (en fazla 30 adım; hafta başında
   sıfırlanır). Geri almada bina girişleri her zaman korunur.
-- **Rehberli öğretici:** Sabit Kadıköy haritasında 4 adım (bağla → ilk araba → diğer evler → geri
-  al/sil). Hedef evler başlangıçta sabitlenir, şehir büyüse de değişmez. Haftalık ödül penceresi bir
+- **Rehberli öğretici:** Sabit Kadıköy haritasında 7 adım (bağla → ilk araba → diğer evler → geri
+  al/sil → trafik ışığı → otoyol ve üst geçit → köprü). Son üç adım okunup geçilebilir; ışık adımı bir
+  ışık konunca kendiliğinden ilerler. Hedef evler başlangıçta sabitlenir, şehir büyüse de değişmez. Haftalık ödül penceresi bir
   çizim sürerken açılmaz, çizim bitince gelir.
 - **Geri bildirim:** Bağlanmamış binaların girişinde renkli halka, her teslimatta "+1", rozetlerin altında
   metin etiketleri.
@@ -172,15 +214,24 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
 
 ## Render
 
-- Katmanlar: zemin → yer adları → yollar → trafik katmanı → binalar → bina durumu → araçlar → seçim →
-  kilitlenme → önizleme → imleç.
+- Katmanlar: zemin → yer adları → yollar → otoyol tabelaları → trafik katmanı → binalar → bina durumu →
+  araçlar → trafik ışıkları → seçim → kilitlenme → önizleme → imleç.
 - Her ilçenin kendi zemin/su/park tonu vardır (`District.palette` → `districtTheme`; yüksek kontrast
   teması etkilenmez). Su, kıyıya işaretli uzaklık alanından (hafif bulanıklaştırılmış) marching squares
   ile çizilir: açık kıyı bandı, su, açık denizde koyu bant ve seyrek nokta dokusu. Bu sayede kıyılar
   hücre basamağı yerine yumuşak eğri olur. Silik ızgara varsayılan olarak açıktır.
 - Yer adları (BOĞAZ, HALİÇ, MARMARA DENİZİ, park adları) `placeLabels` ile yerleşir: adın tamamı kendi
-  arazisinin üstüne, oynanabilir alanın içine ve başka bir adla çakışmadan sığmalıdır. Sığmayan ad,
-  alan büyüyene kadar gösterilmez.
+  arazisinin üstüne ve başka bir adla çakışmadan sığmalıdır. Oynanabilir alanın içi tercih edilir, ama ad
+  alanın 5 hücre dışına da konabilir (orada soluk görünür); böylece deniz alan oraya ulaşmadan adlanır.
+  Dar dereler (`river`) küçük yazılır ve derenin yerel yönüne (çevredeki su hücrelerinin ana ekseni)
+  döndürülür.
+- **Mevsimler:** Her hafta mevsim değişir (`seasonOf`: ilkbahar → yaz → sonbahar → kış). `districtTheme`
+  ilçe paletini mevsime göre karıştırır (kışın karlı zemin, sonbaharda turuncu parklar); harita hafta
+  başında yeniden boyanır, haftalık ödül penceresi mevsimi gösterir. Yüksek kontrast teması değişmez.
+- Otoyollar beyaz kenar çizgili ve kesik orta çizgili çizilir; harita kenarındaki kapılarda harita
+  dışına doğru devam eder. Otoyol adı (D-100, O-1 …) köprü olmayan düz bir kısımda tabela olarak durur:
+  otoyol yeşil, devlet yolu mavi, cadde koyu. Üst geçitler gölgeli küçük bir köprü olarak çizilir.
+  Trafik ışıkları her kolda bir lamba gösterir (yeşil / sarı / kırmızı; korumalı sola dönüşte beyaz nokta).
 - İş yerleri kendi renginde yuvarlatılmış bir zemin üstünde durur; binaların sağ alta düşen uzun,
   yumuşak gölgeleri vardır. Görsel dil Mini Motorways'in genel ilkelerinden (sade, düz renkler, uzun
   gölge) esinlenir; o oyunun hiçbir varlığı, ikonu ya da çizimi kopyalanmamıştır.

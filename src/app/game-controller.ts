@@ -271,6 +271,14 @@ export class GameController {
         if (n.kind === 'error') this.sound.play('fail');
       }),
       ev.on('week', () => this.sound.play('week')),
+      ev.on('gullCall', () => this.sound.play('gull')),
+      ev.on('horn', () => this.sound.play('horn')),
+      ev.on('gullCaught', (g) => {
+        this.sound.play('collect');
+        this.renderer?.popText(g.x, g.y - 6, `+${g.roads} yol`);
+        this.announcer.say(`Martıyı yakaladın: +${g.roads} yol`);
+        this.refreshChrome();
+      }),
       ev.on('upgrade', () => this.showUpgrade()),
       ev.on('newColor', (c) => {
         this.toasts.show(`Yeni renk geldi: ${COLOR_NAMES[c] ?? ''}`, 'success');
@@ -354,7 +362,7 @@ export class GameController {
     const r = this.renderer;
     const t = this.tutorialTargets();
     if (!this.tutorialStep || !s || !r || !t) return;
-    const total = 4;
+    const total = 7;
     const first = t.houses[0];
     if (this.tutorialStep === 1) {
       if (first && s.sim.reachable(first, t.work)) {
@@ -393,12 +401,47 @@ export class GameController {
       r.setHint(null, null);
       this.tutorialStep = 4;
     }
-    if (this.tutorialStep === 4 && this.coach.root.dataset.step !== '4') {
+    const next = (): void => {
+      this.tutorialStep++;
+      this.updateTutorial();
+    };
+    const show = (step: number, text: string, last = false): void => {
+      if (this.coach.root.dataset.step === String(step)) return;
       this.coach.show(
-        4,
+        step,
         total,
-        'Yanlış mı çizdin? "Geri al"a bas ya da "Sil" ile yolu kaldır. Şehir her hafta büyür; hazırsın!',
-        { label: 'Oynamaya devam', run: () => this.endTutorial() },
+        text,
+        last ? { label: 'Oynamaya devam', run: () => this.endTutorial() } : { label: 'Sonraki', run: next },
+      );
+    };
+    if (this.tutorialStep === 4) {
+      show(4, 'Yanlış mı çizdin? "Geri al"a bas ya da "Sil" ile yolu kaldır; parçalar geri gelir.');
+      return;
+    }
+    if (this.tutorialStep === 5) {
+      if (s.sim.junctions.signalCount > 0) {
+        this.tutorialStep = 6;
+        this.sound.play('build');
+      } else {
+        show(
+          5,
+          'Işıksız kavşakta karşıdan araç gelince sürücüler yavaşlar. "Işık"ı seç ve kalabalık bir kavşağa dokun: yönler sırayla yeşil yanar.',
+        );
+        return;
+      }
+    }
+    if (this.tutorialStep === 6) {
+      show(
+        6,
+        'Gri araçlar D-100 otoyolundan şehri geçer. Yolunu otoyola bağlayabilir ya da otoyolun üstünden düz geçerek üst geçit yapabilirsin (1 köprü parçası).',
+      );
+      return;
+    }
+    if (this.tutorialStep === 7) {
+      show(
+        7,
+        'Kurbağalıdere ve deniz kıyısının karşısında da binalar çıkar. Suyun üstüne çizince yol kendiliğinden köprü olur. Şehir her hafta büyür; hazırsın!',
+        true,
       );
     }
   }
@@ -532,7 +575,7 @@ export class GameController {
         s.editable,
         s.resources,
         s.canUndo,
-        s.hasWater,
+        s.usesBridges,
       );
       this.updateTutorial();
       this.updateBanner(s);
@@ -560,7 +603,7 @@ export class GameController {
       s?.editable ?? false,
       s?.resources ?? { roads: 0, bridges: 0, boulevards: 0, lights: 0 },
       s?.canUndo ?? false,
-      s?.hasWater ?? true,
+      s?.usesBridges ?? true,
     );
   }
 
@@ -899,8 +942,11 @@ export class GameController {
   private tap(clientX: number, clientY: number): boolean {
     const s = this.session;
     const r = this.renderer;
+    if (!s || !r) return false;
+    // A gull can be caught with any tool.
+    if (r.pickGull(clientX, clientY) && s.catchGull()) return true;
     // With the eraser or the light tool a tap edits instead of inspecting.
-    if (!s || !r || this.tool === 'erase' || this.tool === 'signal') return false;
+    if (this.tool === 'erase' || this.tool === 'signal') return false;
     const vid = r.pickVehicle(clientX, clientY);
     const cell = r.cellAt(clientX, clientY);
     const bid = vid === null && cell >= 0 ? (s.sim.grid.building[cell] as number) : -1;

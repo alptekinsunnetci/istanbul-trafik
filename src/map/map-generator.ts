@@ -332,6 +332,10 @@ export function generateInitialBuildings(
   const used = new Set<string>();
   const scale = grid.width / MAP.defaultWidth;
   const center: [number, number] = [district.center[0] * scale, district.center[1] * scale];
+  const regions = landRegions(grid);
+  // The first neighbourhood stands on one bank: bridges only matter once the city grows.
+  let home = -1;
+  const sameBank = (x: number, y: number): boolean => home < 0 || regions[grid.idx(x, y)] === home;
   const place = (
     kind: BuildingKind,
     around: [number, number],
@@ -345,6 +349,7 @@ export function generateInitialBuildings(
         minRadius: minR,
         maxRadius: (maxR + grow) * scale,
         minDistance: 3,
+        accept: sameBank,
         ...(bounds ? { bounds } : {}),
       });
     }
@@ -358,6 +363,7 @@ export function generateInitialBuildings(
     return b;
   };
   const work = place('ticari', center, 0, 4);
+  if (work) home = regions[grid.idx(work.x, work.y)] as number;
   const anchor: [number, number] = work ? [work.x + 1, work.y + 1] : center;
   for (let i = 0; i < START_HOUSES; i++) place('konut', anchor, 5, 9);
   placeGateways(grid, district, buildings);

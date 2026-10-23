@@ -44,6 +44,11 @@ export class Grid {
   readonly highway: Uint8Array;
   /** Traffic light on this cell (only effective where it is a junction). */
   readonly signal: Uint8Array;
+  /**
+   * Overpass: a street crosses this highway cell on a bridge. Both roads run
+   * straight through the cell without meeting, so it is no junction.
+   */
+  readonly overpass: Uint8Array;
   readonly building: Int32Array;
   /** Incremented on every road change. */
   version = 0;
@@ -63,6 +68,7 @@ export class Grid {
     this.locked = new Uint8Array(n);
     this.highway = new Uint8Array(n);
     this.signal = new Uint8Array(n);
+    this.overpass = new Uint8Array(n);
     this.building = new Int32Array(n).fill(-1);
   }
 

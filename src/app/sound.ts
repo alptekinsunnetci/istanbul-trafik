@@ -2,7 +2,18 @@
  * Synthesised sound effects (no audio files). The AudioContext is created
  * lazily on the first user gesture, as browsers require.
  */
-export type SoundName = 'click' | 'build' | 'erase' | 'arrive' | 'fail' | 'week' | 'gameover' | 'invalid';
+export type SoundName =
+  | 'click'
+  | 'build'
+  | 'erase'
+  | 'arrive'
+  | 'fail'
+  | 'week'
+  | 'gameover'
+  | 'invalid'
+  | 'gull'
+  | 'horn'
+  | 'collect';
 
 interface Tone {
   freq: number;
@@ -23,6 +34,24 @@ const SOUNDS: Record<SoundName, Tone[]> = {
   week: [
     { freq: 523, dur: 0.1, type: 'triangle', gain: 0.25 },
     { freq: 784, dur: 0.16, type: 'triangle', gain: 0.25, delay: 0.1 },
+  ],
+  // A gull: two falling, slightly raspy cries.
+  gull: [
+    { freq: 1500, to: 900, dur: 0.2, type: 'triangle', gain: 0.1 },
+    { freq: 1480, to: 880, dur: 0.2, type: 'sawtooth', gain: 0.025 },
+    { freq: 1400, to: 820, dur: 0.24, type: 'triangle', gain: 0.09, delay: 0.27 },
+    { freq: 1380, to: 800, dur: 0.24, type: 'sawtooth', gain: 0.02, delay: 0.27 },
+  ],
+  // A car horn: a short two-tone honk, twice.
+  horn: [
+    { freq: 415, dur: 0.22, type: 'square', gain: 0.045 },
+    { freq: 523, dur: 0.22, type: 'square', gain: 0.035 },
+    { freq: 415, dur: 0.14, type: 'square', gain: 0.04, delay: 0.3 },
+    { freq: 523, dur: 0.14, type: 'square', gain: 0.03, delay: 0.3 },
+  ],
+  collect: [
+    { freq: 660, to: 990, dur: 0.12, type: 'triangle', gain: 0.25 },
+    { freq: 1320, dur: 0.12, type: 'triangle', gain: 0.18, delay: 0.11 },
   ],
   gameover: [
     { freq: 392, dur: 0.2, type: 'triangle', gain: 0.3 },

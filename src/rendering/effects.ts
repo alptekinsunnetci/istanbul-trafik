@@ -172,10 +172,13 @@ export function drawSignals(g: Graphics, sim: Simulation, theme: Theme): void {
     for (const d of DIRS) {
       if (!grid.connected(cell, d)) continue;
       const mine = axisOf(d) === st.axis;
-      const color = !mine ? theme.flowCritical : st.phase === 'green' ? theme.flowGood : theme.flowWarn;
-      g.circle(node.cx + (DX[d] as number) * 8, node.cy + (DY[d] as number) * 8, 2.4)
-        .fill(color)
-        .stroke({ width: 1, color: 0xffffff });
+      const go = st.phase === 'green' || st.phase === 'left';
+      const color = !mine ? theme.flowCritical : go ? theme.flowGood : theme.flowWarn;
+      const x = node.cx + (DX[d] as number) * 8;
+      const y = node.cy + (DY[d] as number) * 8;
+      g.circle(x, y, 2.4).fill(color).stroke({ width: 1, color: 0xffffff });
+      // Protected left turn: a white mark inside the green lamp.
+      if (mine && st.phase === 'left') g.circle(x, y, 0.9).fill(0xffffff);
     }
   }
 }
