@@ -4,7 +4,9 @@ import { GameSession, type EditTool } from '../gameplay/game-session';
 import { newlyUnlocked } from '../gameplay/achievements';
 import { type DailyMap, dailyMap, dailyShareText } from '../gameplay/daily';
 import { restoreSession, toSnapshot } from '../gameplay/snapshot';
-import { districtById } from '../map/districts';
+import { type CustomMap, customDistrict, decodeMap } from '../map/custom-map';
+import { districtById, registerDistrict } from '../map/districts';
+import { MapEditor } from '../ui/map-editor';
 import { Terrain } from '../map/grid';
 import { noResources } from '../map/road-editor';
 import { DEFAULT_SETTINGS, type Settings, bestScoreKey } from '../persistence/save-schema';
@@ -20,6 +22,7 @@ import {
   errorScreen,
   gameOverDialog,
   openHelp,
+  introDialog,
   pauseMenu,
   upgradeDialog,
 } from '../ui/menus';
@@ -30,18 +33,20 @@ import { CoachCard } from '../ui/tutorial';
 import { AppStateMachine, STATE_LABELS } from './app-state';
 import { GameLoop } from './game-loop';
 import { SoundPlayer } from './sound';
+import { L } from '../core/i18n';
 
 const AUTOSAVE_INTERVAL = 20;
 
 /** Fixed map for the guided tutorial so that its layout is always the same. */
 const TUTORIAL = { district: 'kadikoy', seed: 2026 } as const;
 const TOOL_LABELS: Record<Tool, string> = {
-  road: 'Yol çizimi',
-  boulevard: 'Bulvar seçildi: bir yolun üstünden sürükleyin',
-  erase: 'Silgi seçildi',
-  signal: 'Trafik ışığı seçildi: bir kavşağa dokunun',
-  roundabout: 'Göbek seçildi: bir kavşağa dokunun',
-  transit: 'Hat seçildi: iki yer arasında sürükleyin',
+  road: L('Yol çizimi', 'Drawing roads'),
+  boulevard: L('Bulvar seçildi: bir yolun üstünden sürükleyin', 'Boulevard selected: drag along a road'),
+  erase: L('Silgi seçildi', 'Eraser selected'),
+  signal: L('Trafik ışığı seçildi: bir kavşağa dokunun', 'Traffic light selected: tap a junction'),
+  roundabout: L('Göbek seçildi: bir kavşağa dokunun', 'Roundabout selected: tap a junction'),
+  transit: L('Hat seçildi: iki yer arasında sürükleyin', 'Line selected: drag between two places'),
+  parking: L('Otopark seçildi: bir iş yerine dokunun', 'Car park selected: tap a workplace'),
 };
 const KEY_TOOLS: Record<string, Tool> = {
   '1': 'road',
@@ -50,6 +55,7 @@ const KEY_TOOLS: Record<string, Tool> = {
   '4': 'signal',
   '5': 'roundabout',
   '6': 'transit',
+  '7': 'parking',
 };
 
 function randomSeed(): number {
@@ -134,6 +140,7 @@ export class GameController {
         continueGame: () => this.continueGame(),
         newGame: (id, seed, mode) => this.newGame(id, seed ?? randomSeed(), mode),
         startDaily: () => this.startDaily(),
+        openEditor: () => this.openEditor(),
         startTutorial: () => this.startTutorial(),
         setMode: (mode) => {
           this.settings = { ...this.settings, mode };
@@ -174,7 +181,10 @@ export class GameController {
     if (loaded.warning) this.toasts.show(loaded.warning, 'warning');
     if (!this.saves.available)
       this.toasts.show(
-        'Tarayıcı depolaması kullanılamıyor: ayarlar, skorlar ve oyun kaydedilmeyecek.',
+        L(
+          'Tarayıcı depolaması kullanılamıyor: ayarlar, skorlar ve oyun kaydedilmeyecek.',
+          'Browser storage is not available: settings, scores and the game will not be saved.',
+        ),
         'warning',
         8000,
       );
@@ -189,11 +199,19 @@ export class GameController {
       const unsupported = err instanceof UnsupportedRendererError;
       errorScreen(
         this.ui,
-        unsupported ? 'Tarayıcınız desteklenmiyor' : 'Oyun başlatılamadı',
         unsupported
-          ? 'İstanbul Trafik WebGL gerektirir. Donanım hızlandırmanın açık olduğundan emin olun veya güncel bir Chrome, Firefox, Edge ya da Safari sürümü kullanın.'
-          : 'Grafik motoru başlatılırken beklenmeyen bir sorun oluştu.',
-        [{ label: 'Tekrar dene', run: () => location.reload() }],
+          ? L('Tarayıcınız desteklenmiyor', 'Your browser is not supported')
+          : L('Oyun başlatılamadı', 'The game could not start'),
+        unsupported
+          ? L(
+              'İstanbul Trafik WebGL gerektirir. Donanım hızlandırmanın açık olduğundan emin olun veya güncel bir Chrome, Firefox, Edge ya da Safari sürümü kullanın.',
+              'İstanbul Trafik needs WebGL. Make sure hardware acceleration is on, or use an up-to-date Chrome, Firefox, Edge or Safari.',
+            )
+          : L(
+              'Grafik motoru başlatılırken beklenmeyen bir sorun oluştu.',
+              'Something unexpected went wrong while starting the graphics.',
+            ),
+        [{ label: L('Tekrar dene', 'Try again'), run: () => location.reload() }],
       );
       return;
     }
@@ -222,6 +240,60 @@ export class GameController {
     this.loop.start();
     this.state.go('menu');
     this.menu.show(this.ui);
+    // A shared map link opens that map in the editor.
+    const shared = /^#harita=(.+)$/.exec(location.hash)?.[1];
+    if (shared) {
+      try {
+        this.openEditor(decodeMap(decodeURIComponent(shared)));
+        this.toasts.show(
+          L(
+            'Paylaşılan harita açıldı: incele ve "Oyna"ya bas.',
+            'Shared map opened: have a look and press "Play".',
+          ),
+          'info',
+          4000,
+        );
+        return;
+      } catch {
+        this.toasts.show(
+          L('Bağlantıdaki harita okunamadı.', 'The map in the link could not be read.'),
+          'warning',
+          4000,
+        );
+      }
+    }
+    this.maybeShowIntro();
+  }
+
+  /** Map editor: its own screen over the menu. */
+  private openEditor(map?: CustomMap): void {
+    this.menu.hide();
+    this.editor.show(this.ui, map);
+  }
+
+  /**
+   * First visit: a short "how to play" with a clear recommendation to try the
+   * guided game. Shown once (remembered in the settings); test runs skip it
+   * unless the address asks for it with `intro`.
+   */
+  private maybeShowIntro(): void {
+    const params = new URLSearchParams(location.search);
+    if (this.settings.seenIntro || (params.has('e2e') && !params.has('intro'))) return;
+    const remember = (): void => {
+      this.applySettings({ ...this.settings, seenIntro: true });
+      this.saves.saveSettings(this.settings);
+    };
+    this.modal = introDialog(this.ui, {
+      tutorial: () => {
+        this.modal = null;
+        remember();
+        this.startTutorial();
+      },
+      later: () => {
+        this.modal = null;
+        remember();
+      },
+    });
   }
 
   // ------------------------------------------------------------- lifecycle
@@ -261,12 +333,15 @@ export class GameController {
     if (this.state.can('error')) this.state.go('error');
     errorScreen(
       this.ui,
-      'Beklenmeyen bir hata oluştu',
-      'Oyun güvenli şekilde durduruldu. Son otomatik kayıttan devam edebilir veya yeni bir oyun başlatabilirsiniz.',
+      L('Beklenmeyen bir hata oluştu', 'Something unexpected went wrong'),
+      L(
+        'Oyun güvenli şekilde durduruldu. Son otomatik kayıttan devam edebilir veya yeni bir oyun başlatabilirsiniz.',
+        'The game was stopped safely. You can continue from the last autosave or start a new game.',
+      ),
       [
-        { label: 'Yeniden yükle', run: () => location.reload() },
+        { label: L('Yeniden yükle', 'Reload'), run: () => location.reload() },
         {
-          label: 'Kaydı silip yeniden başlat',
+          label: L('Kaydı silip yeniden başlat', 'Delete the save and restart'),
           run: () => {
             this.saves.clearGame();
             location.reload();
@@ -288,17 +363,18 @@ export class GameController {
       ev.on('week', () => this.sound.play('week')),
       ev.on('gullCall', () => this.sound.play('gull')),
       ev.on('horn', () => this.sound.play('horn')),
+      ev.on('ferryArrive', () => this.sound.play('ferry')),
       ev.on('transitDelivered', (n) => this.count('transit', n)),
       ev.on('gullCaught', (g) => {
         this.count('gulls');
         this.sound.play('collect');
-        this.renderer?.popText(g.x, g.y - 6, `+${g.roads} yol`);
-        this.announcer.say(`Martıyı yakaladın: +${g.roads} yol`);
+        this.renderer?.popText(g.x, g.y - 6, L(`+${g.roads} yol`, `+${g.roads} roads`));
+        this.announcer.say(L(`Martıyı yakaladın: +${g.roads} yol`, `You caught the gull: +${g.roads} roads`));
         this.refreshChrome();
       }),
       ev.on('upgrade', () => this.showUpgrade()),
       ev.on('newColor', (c) => {
-        this.toasts.show(`Yeni renk geldi: ${COLOR_NAMES[c] ?? ''}`, 'success');
+        this.toasts.show(`${L('Yeni renk geldi', 'New colour')}: ${COLOR_NAMES[c] ?? ''}`, 'success');
         this.renderer?.networkChanged();
       }),
       ev.on('networkChanged', () => this.renderer?.networkChanged()),
@@ -330,6 +406,7 @@ export class GameController {
     if (!districtById(districtId)) return;
     this.daily = null;
     this.menu.hide();
+    this.editor.hide();
     this.modal?.close();
     this.modal = null;
     this.saves.clearGame();
@@ -348,7 +425,9 @@ export class GameController {
     }
     // The game starts right away; demand begins slowly.
     this.toggleRun();
-    this.announcer.say(`${this.session?.district.name}. Evleri aynı renkteki iş yerine yolla bağlayın.`);
+    this.announcer.say(
+      `${this.session?.district.name}. ${L('Evleri aynı renkteki iş yerine yolla bağlayın.', 'Connect houses to the workplace of the same colour.')}`,
+    );
   }
 
   /** Today's map: same district and seed for everyone, on Normal. */
@@ -356,7 +435,11 @@ export class GameController {
     const today = dailyMap(new Date());
     this.newGame(today.districtId, today.seed, 'normal');
     this.daily = today;
-    this.toasts.show(`Günün haritası: ${this.session?.district.name ?? ''}`, 'info', 3000);
+    this.toasts.show(
+      `${L('Günün haritası', 'Daily map')}: ${this.session?.district.name ?? ''}`,
+      'info',
+      3000,
+    );
   }
 
   // ----------------------------------------------------------- achievements
@@ -383,8 +466,8 @@ export class GameController {
         for (const a of more) if (!r.achievements.includes(a.id)) r.achievements.push(a.id);
       });
     for (const a of [...fresh, ...more]) {
-      this.toasts.show(`Başarım: ${a.title} — ${a.text}`, 'success', 4500);
-      this.announcer.say(`Başarım açıldı: ${a.title}`);
+      this.toasts.show(`${L('Başarım', 'Achievement')}: ${a.title} — ${a.text}`, 'success', 4500);
+      this.announcer.say(`${L('Başarım açıldı', 'Achievement unlocked')}: ${a.title}`);
       this.sound.play('collect');
     }
   }
@@ -422,7 +505,7 @@ export class GameController {
     const r = this.renderer;
     const t = this.tutorialTargets();
     if (!this.tutorialStep || !s || !r || !t) return;
-    const total = 7;
+    const total = 10;
     const first = t.houses[0];
     if (this.tutorialStep === 1) {
       if (first && s.sim.reachable(first, t.work)) {
@@ -434,7 +517,10 @@ export class GameController {
         this.coach.show(
           1,
           total,
-          'Kesik çizgiyi takip et: evden aynı renkteki iş yerine parmağınla ya da fareyle sürükleyerek yol çiz.',
+          L(
+            'Kesik çizgiyi takip et: evden aynı renkteki iş yerine parmağınla ya da fareyle sürükleyerek yol çiz.',
+            'Follow the dashed line: drag a road from the house to the workplace of the same colour, with a finger or the mouse.',
+          ),
         );
         return;
       }
@@ -443,7 +529,14 @@ export class GameController {
       r.setHint(null, null);
       if (s.sim.stats.completed > 0) this.tutorialStep = 3;
       else {
-        this.coach.show(2, total, 'Harika! Araba yola çıktı. Her ulaşan araba sana 1 puan kazandırır.');
+        this.coach.show(
+          2,
+          total,
+          L(
+            'Harika! Araba yola çıktı. Her ulaşan araba sana 1 puan kazandırır.',
+            'Great! The car is on its way. Every car that arrives is 1 point.',
+          ),
+        );
         return;
       }
     }
@@ -454,7 +547,10 @@ export class GameController {
         this.coach.show(
           3,
           total,
-          'İş yerinin yanındaki noktalar bekleyen arabalardır. Diğer evleri de bağla ki hepsi zamanında gelsin.',
+          L(
+            'İş yerinin yanındaki noktalar bekleyen arabalardır. Diğer evleri de bağla ki hepsi zamanında gelsin.',
+            'The dots by the workplace are cars waiting to come. Connect the other houses too so they all arrive in time.',
+          ),
         );
         return;
       }
@@ -471,11 +567,19 @@ export class GameController {
         step,
         total,
         text,
-        last ? { label: 'Oynamaya devam', run: () => this.endTutorial() } : { label: 'Sonraki', run: next },
+        last
+          ? { label: L('Oynamaya devam', 'Keep playing'), run: () => this.endTutorial() }
+          : { label: L('Sonraki', 'Next'), run: next },
       );
     };
     if (this.tutorialStep === 4) {
-      show(4, 'Yanlış mı çizdin? "Geri al"a bas ya da "Sil" ile yolu kaldır; parçalar geri gelir.');
+      show(
+        4,
+        L(
+          'Yanlış mı çizdin? "Geri al"a bas ya da "Sil" ile yolu kaldır; parçalar geri gelir.',
+          'Drew it wrong? Press "Undo" or remove the road with "Erase"; the pieces come back.',
+        ),
+      );
       return;
     }
     if (this.tutorialStep === 5) {
@@ -485,22 +589,71 @@ export class GameController {
       } else {
         show(
           5,
-          'Işıksız kavşakta karşıdan araç gelince sürücüler yavaşlar. "Işık"ı seç ve kalabalık bir kavşağa dokun: yönler sırayla yeşil yanar.',
+          L(
+            'Işıksız kavşakta karşıdan araç gelince sürücüler yavaşlar. "Işık"ı seç ve kalabalık bir kavşağa dokun: yönler sırayla yeşil yanar.',
+            'At a junction without lights drivers slow down for crossing traffic. Pick "Light" and tap a busy junction: directions take turns.',
+          ),
         );
         return;
       }
     }
     if (this.tutorialStep === 6) {
+      if (s.sim.grid.roundabout.some((x) => x === 1)) {
+        this.tutorialStep = 7;
+        this.sound.play('build');
+      } else {
+        show(
+          6,
+          L(
+            '"Göbek" ile bir kavşağı göbekli kavşağa çevir: araçlar durmadan, yavaşlayarak girer ve adanın çevresinden döner.',
+            'Turn a junction into a roundabout with "Roundabout": cars enter without stopping, just slowing down, and go round the island.',
+          ),
+        );
+        return;
+      }
+    }
+    if (this.tutorialStep === 7) {
+      if (s.sim.buildings.some((b) => b.kind === 'durak')) {
+        this.tutorialStep = 8;
+        this.sound.play('build');
+      } else {
+        show(
+          7,
+          L(
+            '"Hat" ile iki yer arasında sürükle: su üstünden vapur, karadan metro hattı kurulur. Yakındaki evlerin yolcuları yürür; karşı durakta otobüse ya da taksiye biner.',
+            'Drag between two places with "Line": over water it builds a ferry, over land a metro. People from nearby houses walk there and take a bus or taxi at the other end.',
+          ),
+        );
+        return;
+      }
+    }
+    if (this.tutorialStep === 8) {
       show(
-        6,
-        'Gri araçlar D-100 otoyolundan şehri geçer. Yolunu otoyola bağlayabilir ya da otoyolun üstünden düz geçerek üst geçit yapabilirsin (1 köprü parçası).',
+        8,
+        L(
+          'Gri araçlar D-100 otoyolundan şehri geçer. Yolunu otoyola bağlayabilir ya da otoyolun üstünden düz geçerek üst geçit yapabilirsin (1 köprü parçası).',
+          'Grey cars cross the city on the D-100. You can join your road to the highway, or draw straight across it for an overpass (1 bridge piece).',
+        ),
       );
       return;
     }
-    if (this.tutorialStep === 7) {
+    if (this.tutorialStep === 9) {
       show(
-        7,
-        'Kurbağalıdere ve deniz kıyısının karşısında da binalar çıkar. Suyun üstüne çizince yol kendiliğinden köprü olur. Şehir her hafta büyür; hazırsın!',
+        9,
+        L(
+          'Kurbağalıdere ve deniz kıyısının karşısında da binalar çıkar. Suyun üstüne çizince yol kendiliğinden köprü olur.',
+          'Buildings also appear across the Kurbağalıdere and the shore. Draw over water and the road becomes a bridge by itself.',
+        ),
+      );
+      return;
+    }
+    if (this.tutorialStep === 10) {
+      show(
+        10,
+        L(
+          'Sabah ve akşam iş saatlerinde trafik artar, gece azalır. 3. haftadan sonra maç günü, yağmur ve yol çalışması olur. Şehir her hafta büyür; hazırsın!',
+          'Traffic rises in the morning and evening rush hours and drops at night. From week 3 come match days, rain and road works. The city grows every week; you are ready!',
+        ),
         true,
       );
     }
@@ -544,7 +697,7 @@ export class GameController {
   private continueGame(): void {
     const loaded = this.saves.loadGame();
     if (!loaded.value) {
-      this.toasts.show(loaded.warning ?? 'Kayıtlı oyun bulunamadı.', 'warning');
+      this.toasts.show(loaded.warning ?? L('Kayıtlı oyun bulunamadı.', 'No saved game found.'), 'warning');
       this.menu.show(this.ui);
       return;
     }
@@ -554,7 +707,13 @@ export class GameController {
     } catch (err) {
       console.warn('Kayıt geri yüklenemedi', err);
       this.saves.clearGame();
-      this.toasts.show('Kayıtlı oyun bozuk veya uyumsuzdu ve silindi.', 'warning');
+      this.toasts.show(
+        L(
+          'Kayıtlı oyun bozuk veya uyumsuzdu ve silindi.',
+          'The saved game was damaged or incompatible and has been removed.',
+        ),
+        'warning',
+      );
       this.menu.hide();
       this.menu.show(this.ui);
       return;
@@ -563,7 +722,10 @@ export class GameController {
     this.attachSession(session);
     if (session.phase === 'ready') session.start();
     this.state.go('paused');
-    this.toasts.show('Kayıtlı oyun yüklendi. Devam etmek için Boşluk.', 'success');
+    this.toasts.show(
+      L('Kayıtlı oyun yüklendi. Devam etmek için Boşluk.', 'Saved game loaded. Press Space to continue.'),
+      'success',
+    );
     if (session.pendingUpgrades) this.showUpgrade();
   }
 
@@ -589,9 +751,13 @@ export class GameController {
       });
     }
     this.checkAchievements();
-    if (!r.write.ok) this.toasts.show(`Skor kaydedilemedi: ${r.write.error ?? ''}`, 'error');
+    if (!r.write.ok)
+      this.toasts.show(
+        `${L('Skor kaydedilemedi', 'The score could not be saved')}: ${r.write.error ?? ''}`,
+        'error',
+      );
     const best = r.records.bestScores[bestScoreKey(summary.districtId, summary.mode)] ?? summary.score;
-    this.announcer.say(`Oyun bitti. Skor ${summary.score}.`);
+    this.announcer.say(L(`Oyun bitti. Skor ${summary.score}.`, `Game over. Score ${summary.score}.`));
     this.modal = gameOverDialog(this.ui, summary, r.newBest, best, {
       again: () => {
         this.modal = null;
@@ -620,9 +786,9 @@ export class GameController {
         return;
       }
       await navigator.clipboard.writeText(text);
-      this.toasts.show('Sonuç panoya kopyalandı.', 'success', 2500);
+      this.toasts.show(L('Sonuç panoya kopyalandı.', 'Result copied to the clipboard.'), 'success', 2500);
     } catch {
-      this.toasts.show('Paylaşılamadı.', 'warning', 2500);
+      this.toasts.show(L('Paylaşılamadı.', 'Could not share.'), 'warning', 2500);
     }
   }
 
@@ -638,7 +804,11 @@ export class GameController {
     }
     if (!result.ok && !this.saveWarned) {
       this.saveWarned = true;
-      this.toasts.show(`Otomatik kayıt yapılamadı: ${result.error ?? ''}`, 'error', 7000);
+      this.toasts.show(
+        `${L('Otomatik kayıt yapılamadı', 'Autosave failed')}: ${result.error ?? ''}`,
+        'error',
+        7000,
+      );
     } else if (result.ok) {
       this.saveWarned = false;
     }
@@ -706,7 +876,11 @@ export class GameController {
   private updateBanner(s: GameSession): void {
     const show = s.sim.stats.completed === 0 && this.state.state !== 'gameover' && this.tutorialStep === 0;
     this.banner.hidden = !show;
-    if (show) this.banner.textContent = 'Evden aynı renkteki iş yerine sürükleyerek yol çiz';
+    if (show)
+      this.banner.textContent = L(
+        'Evden aynı renkteki iş yerine sürükleyerek yol çiz',
+        'Drag a road from a house to the workplace of the same colour',
+      );
   }
 
   // ------------------------------------------------------------- controls
@@ -719,15 +893,15 @@ export class GameController {
       s.start();
       this.state.go('playing');
       this.loop.reset();
-      this.announcer.say('Simülasyon başladı.');
+      this.announcer.say(L('Simülasyon başladı.', 'Simulation started.'));
     } else if (st === 'playing') {
       this.state.go('paused');
       this.autosave();
-      this.announcer.say('Duraklatıldı.');
+      this.announcer.say(L('Duraklatıldı.', 'Paused.'));
     } else if (st === 'paused') {
       this.state.go('playing');
       this.loop.reset();
-      this.announcer.say('Devam ediliyor.');
+      this.announcer.say(L('Devam ediliyor.', 'Resumed.'));
     }
     this.sound.play('click');
   }
@@ -736,7 +910,7 @@ export class GameController {
     const options = SIM.speedOptions;
     const i = options.findIndex((x) => x === this.speed);
     this.speed = options[(i + 1) % options.length] ?? 1;
-    this.announcer.say(`Hız ${this.speed}×`);
+    this.announcer.say(`${L('Hız', 'Speed')} ${this.speed}×`);
     this.refreshChrome();
   }
 
@@ -746,9 +920,12 @@ export class GameController {
     const wasPlaying = this.pauseForModal();
     this.modal = confirmDialog(
       this.ui,
-      'Yeniden başlat',
-      `${s.district.name} haritası baştan başlatılsın mı? Bu oyundaki ilerleme silinir.`,
-      'Yeniden başlat',
+      L('Yeniden başlat', 'Restart'),
+      L(
+        `${s.district.name} haritası baştan başlatılsın mı? Bu oyundaki ilerleme silinir.`,
+        `Restart ${s.district.name} from the beginning? Progress in this game is lost.`,
+      ),
+      L('Yeniden başlat', 'Restart'),
       () => {
         this.modal = null;
         this.newGame(s.district.id, s.seed, s.mode);
@@ -933,6 +1110,29 @@ export class GameController {
 
   /** Tool used by the current stroke (the right mouse button always erases). */
   private strokeTool: EditTool = 'road';
+  private readonly editor = new MapEditor({
+    play: (map) => {
+      const d = customDistrict(map);
+      registerDistrict(d);
+      if (location.hash.startsWith('#harita='))
+        history.replaceState(null, '', location.pathname + location.search);
+      this.newGame(d.id, randomSeed(), this.settings.mode);
+    },
+    back: () => {
+      this.editor.hide();
+      if (location.hash.startsWith('#harita='))
+        history.replaceState(null, '', location.pathname + location.search);
+      this.menu.show(this.ui);
+    },
+    share: async (text) => {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  });
   /** Today's map when the current game is the daily one. */
   private daily: DailyMap | null = null;
   private achTimer = 1;
@@ -1011,24 +1211,26 @@ export class GameController {
       if (b) {
         text =
           b.kind === 'kapi'
-            ? `${b.name} · şehir dışına giden otoyol`
+            ? `${b.name} · ${L('şehir dışına giden otoyol', 'highway out of the city')}`
             : b.transit
-              ? `${b.name} · ${b.transit.mode === 'vapur' ? 'vapur iskelesi' : 'metro istasyonu'} · ${b.transit.riders.length} yolcu yolda`
+              ? `${b.name} · ${b.transit.mode === 'vapur' ? L('vapur iskelesi', 'ferry pier') : L('metro istasyonu', 'metro station')} · ${b.transit.riders.length} ${L('yolcu yolda', 'riding')}`
               : `${b.name} · ${COLOR_NAMES[b.color] ?? ''} ${BUILDING_TYPES[b.kind].label.toLocaleLowerCase('tr')}`;
-        if (b.kind === 'konut' && b.pending.length > 0) text += ` · ${b.pending.length} araç bekliyor`;
-        if (b.kind === 'konut' && b.unreachable && b.pending.length > 0) text += ' · iş yerine yol yok';
+        if (b.kind === 'konut' && b.pending.length > 0)
+          text += ` · ${b.pending.length} ${L('araç bekliyor', 'waiting')}`;
+        if (b.kind === 'konut' && b.unreachable && b.pending.length > 0)
+          text += L(' · iş yerine yol yok', ' · no road to the workplace');
       }
     } else if (g.isRoad(cell)) {
       const node = s.sim.graph.node(cell);
-      const lanes = g.lanes[cell] === 2 ? 'Bulvar' : 'Yol';
+      const lanes = g.lanes[cell] === 2 ? L('Bulvar', 'Boulevard') : L('Yol', 'Road');
       text = g.isHighway(cell)
-        ? `Otoyol${node && node.degree >= 3 ? ` · kavşak (${node.degree} kol)` : ''} · geçen trafik akar`
+        ? `${L('Otoyol', 'Highway')}${node && node.degree >= 3 ? ` · ${L('kavşak', 'junction')} (${node.degree})` : ''} · ${L('geçen trafik akar', 'through traffic')}`
         : g.locked[cell] === 1
-          ? 'Bina girişi'
+          ? L('Bina girişi', 'Building entrance')
           : node && node.degree >= 3
-            ? `Kavşak (${node.degree} kol)`
+            ? L(`Kavşak (${node.degree} kol)`, `Junction (${node.degree} arms)`)
             : lanes;
-      if (g.isBridge(cell)) text += ' · Köprü';
+      if (g.isBridge(cell)) text += L(' · Köprü', ' · Bridge');
     }
     if (!this.stroke) {
       if (text) {
@@ -1054,7 +1256,8 @@ export class GameController {
       this.tool === 'erase' ||
       this.tool === 'signal' ||
       this.tool === 'roundabout' ||
-      this.tool === 'transit'
+      this.tool === 'transit' ||
+      this.tool === 'parking'
     )
       return false;
     const vid = r.pickVehicle(clientX, clientY);

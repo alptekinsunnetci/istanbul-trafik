@@ -11,7 +11,7 @@ import {
   ROUNDABOUT,
 } from '../core/constants';
 import type { Random } from '../core/random';
-import { type Building, type TripFailureReason, isHighwayTrip } from '../core/world-state';
+import { type Building, type TripFailureReason, doorsOf, isHighwayTrip } from '../core/world-state';
 import { curveLength, junctionCurve } from '../map/geometry';
 import type { Grid } from '../map/grid';
 import {
@@ -169,7 +169,21 @@ export class VehicleSystem {
 
   private destNode(v: Vehicle): number {
     const b = this.buildingIndex.get(v.destination) ?? this.w.buildings.find((x) => x.id === v.destination);
-    return b?.door ?? -1;
+    if (!b) return -1;
+    // Keep driving to the chosen entrance while it exists (a car park may be removed).
+    if (v.destDoor >= 0 && doorsOf(b, this.w.buildings).includes(v.destDoor)) return v.destDoor;
+    return b.door;
+  }
+
+  /** The cheapest route from a node to any entrance of a building (its door or a car park). */
+  bestRoute(from: number, dest: Building): { door: number; route: Route } | null {
+    let best: { door: number; route: Route } | null = null;
+    for (const door of doorsOf(dest, this.w.buildings)) {
+      const route = this.routeFrom({ node: from }, door);
+      if (!route || route.edges.length === 0) continue;
+      if (!best || route.cost < best.route.cost) best = { door, route };
+    }
+    return best;
   }
 
   private nextMove(v: Vehicle, edge: GraphEdge): Move | null {
@@ -359,7 +373,7 @@ export class VehicleSystem {
       if (!trip) continue;
       const dest = this.buildingIndex.get(trip.destination);
       if (!dest) continue;
-      const route = this.routeFrom({ node: b.door }, dest.door);
+      const route = this.bestRoute(b.door, dest)?.route;
       if (!route || route.edges.length === 0) {
         b.unreachable = true;
         continue;
@@ -438,12 +452,14 @@ export class VehicleSystem {
     if (!b || !trip) return;
     const dest = this.buildingIndex.get(trip.destination);
     if (!dest) return;
-    const route = this.routeFrom({ node: b.door }, dest.door);
-    if (!route || route.edges.length === 0) return;
+    const best = this.bestRoute(b.door, dest);
+    if (!best) return;
+    const route = best.route;
     b.pending.shift();
     const kind: VehicleKind = trip.kind ?? KIND_KEYS[w.rng.weightedIndex(KIND_WEIGHTS)] ?? 'car';
     const freeFlow = routeCost(w.graph, freeFlowCosts, null, route.edges);
     const v = createVehicle(w.nextVehicleId(), kind, trip, [...route.edges], w.time, freeFlow, w.rng.next());
+    v.destDoor = best.door;
     const first = w.graph.edge(v.edge) as GraphEdge;
     v.s = v.length;
     // Pull out briskly when the lane ahead is clear.

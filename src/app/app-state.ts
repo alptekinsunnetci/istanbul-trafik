@@ -1,3 +1,4 @@
+import { L } from '../core/i18n';
 /**
  * Explicit application states. Settings and help are overlays that can be
  * opened on top of most states; while an overlay is open during play the
@@ -60,11 +61,11 @@ export class AppStateMachine {
 }
 
 export const STATE_LABELS: Record<AppState, string> = {
-  loading: 'Yükleniyor',
-  menu: 'Ana menü',
-  ready: 'Hazır',
-  playing: 'Oyun sürüyor',
-  paused: 'Duraklatıldı',
-  gameover: 'Oyun bitti',
-  error: 'Hata',
+  loading: L('Yükleniyor', 'Loading'),
+  menu: L('Ana menü', 'Main menu'),
+  ready: L('Hazır', 'Ready'),
+  playing: L('Oyun sürüyor', 'Playing'),
+  paused: L('Duraklatıldı', 'Paused'),
+  gameover: L('Oyun bitti', 'Game over'),
+  error: L('Hata', 'Error'),
 };

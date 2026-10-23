@@ -102,11 +102,19 @@ export function dispatch(station: Building, time: number, nextTripId: () => numb
         createdAt: time,
         passengers: group.length,
         kind: 'otobus',
+        homes: group.map((t) => t.origin),
       });
       queued++;
     }
     for (const trip of rest) {
-      station.pending.push({ ...trip, origin: station.id, createdAt: time, passengers: 1, kind: 'taxi' });
+      station.pending.push({
+        ...trip,
+        origin: station.id,
+        createdAt: time,
+        passengers: 1,
+        kind: 'taxi',
+        homes: [trip.origin],
+      });
       queued++;
     }
   }

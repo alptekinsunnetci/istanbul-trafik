@@ -1,4 +1,5 @@
 import { Terrain, type TerrainType } from './grid';
+import { L } from '../core/i18n';
 
 export type Difficulty = 'kolay' | 'orta' | 'zor';
 
@@ -49,6 +50,8 @@ export interface District {
   palette: DistrictPalette;
   labels: readonly MapLabel[];
   highways: readonly Highway[];
+  /** Map editor maps: their share code (saved with the game, so it can be loaded again). */
+  code?: string;
 }
 
 function inRect(x: number, y: number, x0: number, y0: number, x1: number, y1: number): boolean {
@@ -65,7 +68,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'besiktas',
     name: 'Beşiktaş',
-    tagline: 'Boğaz kıyısı, Levent kuleleri ve dar yokuşlarıyla yoğun bir ilçe.',
+    tagline: L(
+      'Boğaz kıyısı, Levent kuleleri ve dar yokuşlarıyla yoğun bir ilçe.',
+      'Bosphorus shore, Levent towers and steep lanes: a busy district.',
+    ),
     difficulty: 'orta',
     demandMultiplier: 1,
     startRoads: 36,
@@ -118,7 +124,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'kadikoy',
     name: 'Kadıköy',
-    tagline: 'Moda sahilinden Bağdat Caddesi’ne uzanan Anadolu yakası merkezi.',
+    tagline: L(
+      'Moda sahilinden Bağdat Caddesi’ne uzanan Anadolu yakası merkezi.',
+      'The Asian side centre, from the Moda shore to Bağdat Avenue.',
+    ),
     difficulty: 'kolay',
     demandMultiplier: 0.85,
     startRoads: 40,
@@ -178,7 +187,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'sariyer',
     name: 'Sarıyer',
-    tagline: 'Boğaz’ın Karadeniz’e açıldığı yerde yalılar, korular ve Belgrad Ormanı.',
+    tagline: L(
+      'Boğaz’ın Karadeniz’e açıldığı yerde yalılar, korular ve Belgrad Ormanı.',
+      'Waterside mansions, groves and the Belgrad Forest where the Bosphorus meets the Black Sea.',
+    ),
     difficulty: 'orta',
     demandMultiplier: 0.95,
     startRoads: 38,
@@ -233,7 +245,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'sisli',
     name: 'Şişli',
-    tagline: 'Mecidiyeköy’ün plazaları, Nişantaşı’nın caddeleri: denizsiz, yoğun bir iş merkezi.',
+    tagline: L(
+      'Mecidiyeköy’ün plazaları, Nişantaşı’nın caddeleri: denizsiz, yoğun bir iş merkezi.',
+      'Mecidiyeköy towers and Nişantaşı streets: a crowded business centre with no sea.',
+    ),
     difficulty: 'zor',
     demandMultiplier: 1.1,
     startRoads: 34,
@@ -288,7 +303,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'bakirkoy',
     name: 'Bakırköy',
-    tagline: 'Ataköy’den Yeşilköy’e uzanan sahil şeridi ve geniş bulvarlar.',
+    tagline: L(
+      'Ataköy’den Yeşilköy’e uzanan sahil şeridi ve geniş bulvarlar.',
+      'A coastline from Ataköy to Yeşilköy, with wide boulevards.',
+    ),
     difficulty: 'kolay',
     demandMultiplier: 0.85,
     startRoads: 40,
@@ -339,7 +357,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'beykoz',
     name: 'Beykoz',
-    tagline: 'Anadolu yakasında Boğaz kıyısı, Göksu Deresi ve ormanlarla çevrili köyler.',
+    tagline: L(
+      'Anadolu yakasında Boğaz kıyısı, Göksu Deresi ve ormanlarla çevrili köyler.',
+      'Asian Bosphorus shore, the Göksu stream and villages among forests.',
+    ),
     difficulty: 'kolay',
     demandMultiplier: 0.8,
     startRoads: 40,
@@ -398,7 +419,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'uskudar',
     name: 'Üsküdar',
-    tagline: 'Kuzguncuk’tan Çengelköy’e, koruların arasında kıvrılan sahil yolu.',
+    tagline: L(
+      'Kuzguncuk’tan Çengelköy’e, koruların arasında kıvrılan sahil yolu.',
+      'A shore road winding between groves, from Kuzguncuk to Çengelköy.',
+    ),
     difficulty: 'orta',
     demandMultiplier: 1,
     startRoads: 36,
@@ -453,7 +477,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'beyoglu',
     name: 'Beyoğlu',
-    tagline: 'Galata’dan Taksim’e: Haliç ile Boğaz arasında yokuşlu, kalabalık sokaklar.',
+    tagline: L(
+      'Galata’dan Taksim’e: Haliç ile Boğaz arasında yokuşlu, kalabalık sokaklar.',
+      'From Galata to Taksim: steep, crowded streets between the Golden Horn and the Bosphorus.',
+    ),
     difficulty: 'zor',
     demandMultiplier: 1.15,
     startRoads: 36,
@@ -510,7 +537,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'basaksehir',
     name: 'Başakşehir',
-    tagline: 'Yeni mahalleler, geniş bulvarlar, Sazlıdere Barajı ve Millet Bahçesi.',
+    tagline: L(
+      'Yeni mahalleler, geniş bulvarlar, Sazlıdere Barajı ve Millet Bahçesi.',
+      'New neighbourhoods, wide boulevards, the Sazlıdere dam and the Nation’s Garden.',
+    ),
     difficulty: 'orta',
     demandMultiplier: 1.0,
     startRoads: 38,
@@ -564,7 +594,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'maltepe',
     name: 'Maltepe',
-    tagline: 'Marmara kıyısında sahil parkı, D-100 ve tepelere tırmanan mahalleler.',
+    tagline: L(
+      'Marmara kıyısında sahil parkı, D-100 ve tepelere tırmanan mahalleler.',
+      'A seaside park on the Marmara, the D-100 and neighbourhoods climbing the hills.',
+    ),
     difficulty: 'kolay',
     demandMultiplier: 0.85,
     startRoads: 40,
@@ -619,7 +652,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'fatih',
     name: 'Fatih',
-    tagline: 'Haliç ile Marmara arasında, tarihi yarımadanın dar sokakları.',
+    tagline: L(
+      'Haliç ile Marmara arasında, tarihi yarımadanın dar sokakları.',
+      'Narrow streets of the historic peninsula between the Golden Horn and the Marmara.',
+    ),
     difficulty: 'zor',
     demandMultiplier: 1.15,
     startRoads: 38,
@@ -677,7 +713,10 @@ export const DISTRICTS: readonly District[] = [
   {
     id: 'bagcilar',
     name: 'Bağcılar',
-    tagline: 'TEM ile Basın Ekspres arasında denizsiz, çok yoğun bir yerleşim.',
+    tagline: L(
+      'TEM ile Basın Ekspres arasında denizsiz, çok yoğun bir yerleşim.',
+      'A very dense area with no sea, between the TEM and the Basın Ekspres.',
+    ),
     difficulty: 'zor',
     demandMultiplier: 1.25,
     startRoads: 34,
@@ -730,12 +769,19 @@ export const DISTRICTS: readonly District[] = [
   },
 ];
 
+/** Maps made in the map editor, registered while the page is open. */
+const customDistricts = new Map<string, District>();
+
+export function registerDistrict(d: District): void {
+  customDistricts.set(d.id, d);
+}
+
 export function districtById(id: string): District | undefined {
-  return DISTRICTS.find((d) => d.id === id);
+  return DISTRICTS.find((d) => d.id === id) ?? customDistricts.get(id);
 }
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
-  kolay: 'Kolay',
-  orta: 'Orta',
-  zor: 'Zor',
+  kolay: L('Kolay', 'Easy'),
+  orta: L('Orta', 'Medium'),
+  zor: L('Zor', 'Hard'),
 };

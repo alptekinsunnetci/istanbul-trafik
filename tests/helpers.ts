@@ -123,6 +123,7 @@ export function connectAll(session: GameSession): void {
     lights: 100,
     roundabouts: 100,
     lines: 10,
+    parkings: 10,
   };
   // Test networks may span the whole district, not only the initial playable area.
   const g = session.sim.grid;

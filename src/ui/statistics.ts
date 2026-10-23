@@ -3,6 +3,7 @@ import { overflowUsed, pinsAt } from '../traffic/demand-generator';
 import type { GameSession } from '../gameplay/game-session';
 import { VEHICLE_KIND_LABELS, VEHICLE_STATE_LABELS } from '../traffic/vehicle-model';
 import { button, formatNumber, formatPercent, formatTime, h } from './dom';
+import { L } from '../core/i18n';
 
 type Row = [label: string, value: string];
 
@@ -28,11 +29,15 @@ export class StatsPanel {
       h(
         'div',
         { class: 'panel-head' },
-        h('h2', { id: 'stats-title', text: 'Trafik istatistikleri' }),
-        button('Paneli kapat', onClose, { icon: 'close', iconOnly: true, className: 'round round-small' }),
+        h('h2', { id: 'stats-title', text: L('Trafik istatistikleri', 'Traffic statistics') }),
+        button(L('Paneli kapat', 'Close panel'), onClose, {
+          icon: 'close',
+          iconOnly: true,
+          className: 'round round-small',
+        }),
       ),
       this.dl,
-      h('h3', { class: 'panel-h3', text: 'Yarıda kalan araçlar' }),
+      h('h3', { class: 'panel-h3', text: L('Yarıda kalan araçlar', 'Vehicles that gave up') }),
       this.reasons,
     );
   }
@@ -54,31 +59,43 @@ export class StatsPanel {
     const avgWait = s.completed > 0 ? s.totalWaitTime / s.completed : 0;
     const avgQueue = s.queueSamples > 0 ? s.queueSampleSum / s.queueSamples : 0;
     rowsTo(this.dl, [
-      ['Toplam üretilen araç', formatNumber(s.spawned)],
-      ['Tamamlanan yolculuk', formatNumber(s.completed)],
-      ['Şehirden geçen araç', formatNumber(sim.throughCompleted)],
-      ['Yarıda kalan araç', formatNumber(s.failed)],
-      ['Aktif araç', formatNumber(sim.vehicles.length)],
+      [L('Toplam üretilen araç', 'Vehicles started'), formatNumber(s.spawned)],
+      [L('Tamamlanan yolculuk', 'Finished trips'), formatNumber(s.completed)],
+      [L('Şehirden geçen araç', 'Vehicles passing through'), formatNumber(sim.throughCompleted)],
+      [L('Yarıda kalan araç', 'Vehicles that gave up'), formatNumber(s.failed)],
+      [L('Aktif araç', 'Active vehicles'), formatNumber(sim.vehicles.length)],
       ['Bekleyen yolculuk', formatNumber(sim.totalPending())],
-      ['Ortalama seyahat süresi', `${formatNumber(avgTravel, 1)} sn`],
-      ['Ortalama bekleme süresi', `${formatNumber(avgWait, 1)} sn`],
-      ['Zamanında varış', s.completed > 0 ? formatPercent(s.onTime / s.completed) : '—'],
+      [L('Ortalama seyahat süresi', 'Average travel time'), `${formatNumber(avgTravel, 1)} sn`],
+      [L('Ortalama bekleme süresi', 'Average waiting time'), `${formatNumber(avgWait, 1)} sn`],
+      [L('Zamanında varış', 'On time'), s.completed > 0 ? formatPercent(s.onTime / s.completed) : '—'],
       [
-        'Ağ verimliliği',
+        L('Ağ verimliliği', 'Network efficiency'),
         s.totalTravelTime > 0 ? formatPercent(Math.min(1, s.totalFreeFlowTime / s.totalTravelTime)) : '—',
       ],
-      ['En uzun kuyruk (şimdi)', `${formatNumber(q.longestQueue)} araç`],
-      ['En uzun kuyruk (oyun boyu)', `${formatNumber(s.longestQueueEver)} araç`],
-      ['Ortalama kuyruk', `${formatNumber(avgQueue, 1)} araç`],
-      ['Kuyruktaki araç', formatNumber(q.queuedVehicles)],
-      ['Trafik yoğunluğu', `${formatNumber(q.density, 1)} araç/km`],
-      ['Yol kullanım oranı', formatPercent(q.utilization)],
-      ['Yol ağı', `${formatNumber(sim.graph.edges.size)} yön · ${formatNumber(sim.graph.nodes.size)} düğüm`],
-      ['Kilitlenme noktası', formatNumber(sim.gridlocks.reduce((n, g) => n + g.nodes.length, 0))],
+      [
+        L('En uzun kuyruk (şimdi)', 'Longest queue (now)'),
+        `${formatNumber(q.longestQueue)} ${L('araç', 'vehicles')}`,
+      ],
+      ['En uzun kuyruk (oyun boyu)', `${formatNumber(s.longestQueueEver)} ${L('araç', 'vehicles')}`],
+      ['Ortalama kuyruk', `${formatNumber(avgQueue, 1)} ${L('araç', 'vehicles')}`],
+      [L('Kuyruktaki araç', 'Vehicles queued'), formatNumber(q.queuedVehicles)],
+      [
+        L('Trafik yoğunluğu', 'Traffic density'),
+        `${formatNumber(q.density, 1)} ${L('araç/km', 'vehicles/km')}`,
+      ],
+      [L('Yol kullanım oranı', 'Road use'), formatPercent(q.utilization)],
+      [
+        L('Yol ağı', 'Road network'),
+        `${formatNumber(sim.graph.edges.size)} ${L('yön', 'links')} · ${formatNumber(sim.graph.nodes.size)} ${L('düğüm', 'nodes')}`,
+      ],
+      [
+        L('Kilitlenme noktası', 'Gridlocks'),
+        formatNumber(sim.gridlocks.reduce((n, g) => n + g.nodes.length, 0)),
+      ],
     ]);
     rowsTo(this.reasons, [
-      ['Rota kalmadı', formatNumber(s.failedByReason.noRoute)],
-      ['Yol silindi', formatNumber(s.failedByReason.roadRemoved)],
+      [L('Rota kalmadı', 'No route left'), formatNumber(s.failedByReason.noRoute)],
+      [L('Yol silindi', 'Road erased'), formatNumber(s.failedByReason.roadRemoved)],
     ]);
   }
 }
@@ -96,7 +113,11 @@ export class Inspector {
         'div',
         { class: 'panel-head' },
         this.title,
-        button('Seçimi kaldır', onClose, { icon: 'close', iconOnly: true, className: 'round round-small' }),
+        button(L('Seçimi kaldır', 'Clear selection'), onClose, {
+          icon: 'close',
+          iconOnly: true,
+          className: 'round round-small',
+        }),
       ),
       this.dl,
     );
@@ -119,14 +140,20 @@ export class Inspector {
       remaining += sim.graph.edge(v.route[k] as string)?.centerLength ?? 0;
     if (!v.junction) remaining -= v.s;
     rowsTo(this.dl, [
-      ['Durum', VEHICLE_STATE_LABELS[v.state]],
-      ['Hız', `${formatNumber(v.v * 3.6)} km/sa`],
-      ['Nereden', sim.buildingById(v.origin)?.name ?? '—'],
-      ['Nereye', sim.buildingById(v.destination)?.name ?? '—'],
-      ['Yolculuk süresi', formatTime(sim.time - v.departTime)],
-      ['Toplam bekleme', `${formatNumber(v.waitTime, 1)} sn`],
-      ['Kalan mesafe', v.state === 'noRoute' ? 'Rota yok' : `${formatNumber(Math.max(0, remaining))} m`],
-      ['Şerit', v.laneChange ? `${v.laneChange.from + 1} → ${v.laneChange.to + 1}` : String(v.lane + 1)],
+      [L('Durum', 'State'), VEHICLE_STATE_LABELS[v.state]],
+      [L('Hız', 'Speed'), `${formatNumber(v.v * 3.6)} km/sa`],
+      [L('Nereden', 'From'), sim.buildingById(v.origin)?.name ?? '—'],
+      [L('Nereye', 'To'), sim.buildingById(v.destination)?.name ?? '—'],
+      [L('Yolculuk süresi', 'Trip time'), formatTime(sim.time - v.departTime)],
+      [L('Toplam bekleme', 'Total waiting'), `${formatNumber(v.waitTime, 1)} sn`],
+      [
+        L('Kalan mesafe', 'Distance left'),
+        v.state === 'noRoute' ? L('Rota yok', 'No route') : `${formatNumber(Math.max(0, remaining))} m`,
+      ],
+      [
+        L('Şerit', 'Lane'),
+        v.laneChange ? `${v.laneChange.from + 1} → ${v.laneChange.to + 1}` : String(v.lane + 1),
+      ],
     ]);
     return true;
   }
@@ -140,34 +167,52 @@ export class Inspector {
       const t = b.transit;
       const onBoard = t.riders.filter((r) => r.readyAt > session.sim.time).length;
       rowsTo(this.dl, [
-        ['Tür', t.mode === 'vapur' ? 'Vapur iskelesi' : 'Metro istasyonu'],
-        ['Hatta yolcu', formatNumber(onBoard)],
-        ['Taksi/otobüs bekleyen', formatNumber(t.riders.length - onBoard + b.pending.length)],
-        ['Karşı durak', session.sim.buildingById(t.partner)?.name ?? '—'],
+        [
+          L('Tür', 'Type'),
+          t.mode === 'vapur' ? L('Vapur iskelesi', 'Ferry pier') : L('Metro istasyonu', 'Metro station'),
+        ],
+        [L('Hatta yolcu', 'Riding the line'), formatNumber(onBoard)],
+        [
+          L('Taksi/otobüs bekleyen', 'Waiting for taxi/bus'),
+          formatNumber(t.riders.length - onBoard + b.pending.length),
+        ],
+        [L('Karşı durak', 'Other end'), session.sim.buildingById(t.partner)?.name ?? '—'],
+      ]);
+      return true;
+    }
+    if (b.kind === 'otopark') {
+      rowsTo(this.dl, [
+        [L('Tür', 'Type'), L('Otopark', 'Car park')],
+        [L('İş yeri', 'Workplace'), session.sim.buildingById(b.parkingFor ?? -1)?.name ?? '—'],
       ]);
       return true;
     }
     if (b.kind === 'kapi') {
       rowsTo(this.dl, [
-        ['Tür', BUILDING_TYPES[b.kind].label],
-        ['Şehre girmeyi bekleyen', formatNumber(b.pending.length)],
-        ['Buradan çıkan araç', formatNumber(b.completed)],
+        [L('Tür', 'Type'), BUILDING_TYPES[b.kind].label],
+        [L('Şehre girmeyi bekleyen', 'Waiting to enter'), formatNumber(b.pending.length)],
+        [L('Buradan çıkan araç', 'Vehicles that left here'), formatNumber(b.completed)],
       ]);
       return true;
     }
     rowsTo(this.dl, [
-      ['Tür', BUILDING_TYPES[b.kind].label],
-      ['Bekleyen araç', formatNumber(b.pending.length)],
-      ['Gelen araç', formatNumber(b.incoming)],
-      ['Ulaşan yolculuk', formatNumber(b.completed)],
-      ['Başarısız', formatNumber(b.failed)],
-      ['Renk', COLOR_NAMES[b.color] ?? String(b.color + 1)],
+      [L('Tür', 'Type'), BUILDING_TYPES[b.kind].label],
+      [L('Bekleyen araç', 'Waiting vehicles'), formatNumber(b.pending.length)],
+      [L('Gelen araç', 'Vehicles on the way'), formatNumber(b.incoming)],
+      [L('Ulaşan yolculuk', 'Arrived trips'), formatNumber(b.completed)],
+      [L('Başarısız', 'Failed'), formatNumber(b.failed)],
+      [L('Renk', 'Colour'), COLOR_NAMES[b.color] ?? String(b.color + 1)],
       ...(b.kind === 'ticari'
         ? ([
-            ['Bekleyen (raptiye)', formatNumber(pinsAt(session.sim.buildings, b))],
-            ['Taşma', formatPercent(overflowUsed(b))],
+            [L('Bekleyen (raptiye)', 'Waiting (pins)'), formatNumber(pinsAt(session.sim.buildings, b))],
+            [L('Taşma', 'Overflow'), formatPercent(overflowUsed(b))],
           ] as Row[])
-        : ([['Bağlantı', b.unreachable ? 'İş yerine yol yok' : 'Bağlı']] as Row[])),
+        : ([
+            [
+              L('Bağlantı', 'Connection'),
+              b.unreachable ? L('İş yerine yol yok', 'No road to the workplace') : L('Bağlı', 'Connected'),
+            ],
+          ] as Row[])),
     ]);
     return true;
   }

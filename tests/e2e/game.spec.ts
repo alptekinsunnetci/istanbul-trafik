@@ -291,7 +291,7 @@ test('guided tutorial: connect the highlighted house, then the others', async ({
   await page.goto('./?e2e');
   await page.locator('#btn-tutorial').click();
   await expect(page.locator('#coach')).toBeVisible();
-  await expect(page.locator('#coach')).toContainText('1/7');
+  await expect(page.locator('#coach')).toContainText('1/10');
   let s = await state(page);
   expect(s.app).toBe('ready'); // the clock waits for the first road
   expect(s.mode).toBe('rahat');
@@ -301,16 +301,16 @@ test('guided tutorial: connect the highlighted house, then the others', async ({
   const work = pair[pair.length - 1]!;
   await page.screenshot({ path: 'test-results/screens/10-tutorial.png' });
   await drawBetween(page, pair[0]!, work);
-  await expect(page.locator('#coach')).toContainText('2/7');
+  await expect(page.locator('#coach')).toContainText('2/10');
   s = await state(page);
   expect(s.app).toBe('playing');
   await page.locator('#btn-speed').click();
   await page.locator('#btn-speed').click();
-  await expect(page.locator('#coach')).toContainText('3/7', { timeout: 60_000 });
+  await expect(page.locator('#coach')).toContainText('3/10', { timeout: 60_000 });
   for (const house of pair.slice(1, -1)) await drawBetween(page, house, work);
-  await expect(page.locator('#coach')).toContainText('4/7');
+  await expect(page.locator('#coach')).toContainText('4/10');
   // Undo/erase, traffic lights, highways, bridges: each can be read and skipped.
-  for (const step of ['5/7', '6/7', '7/7']) {
+  for (const step of ['5/10', '6/10', '7/10', '8/10', '9/10', '10/10']) {
     await page.locator('#btn-coach-next').click();
     await expect(page.locator('#coach')).toContainText(step);
   }
@@ -407,4 +407,24 @@ test('through traffic flows on the highway on its own', async ({ page }) => {
   await expect.poll(async () => (await state(page)).through, { timeout: 40_000 }).toBeGreaterThan(0);
   // Nothing was connected, so the score is still zero.
   expect((await state(page)).completed).toBe(0);
+});
+
+test('first visit: a welcome recommends the guided game', async ({ page }) => {
+  await page.goto('./?e2e&intro');
+  await expect(page.locator('#intro-dialog')).toBeVisible();
+  await expect(page.locator('#btn-intro-tutorial')).toContainText('önerilen');
+  await page.locator('#btn-intro-tutorial').click();
+  await expect(page.locator('#coach')).toBeVisible();
+  // Remembered: it does not come back.
+  await page.goto('./?e2e&intro');
+  await expect(page.locator('#menu-title')).toBeVisible();
+  await expect(page.locator('#intro-dialog')).toHaveCount(0);
+});
+
+test('the interface is also available in English', async ({ page }) => {
+  await page.goto('./?e2e&lang=en');
+  await expect(page.locator('#btn-tutorial')).toHaveText('Learn by playing');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await page.locator('#btn-menu-settings').click();
+  await expect(page.locator('#set-lang')).toHaveValue('en');
 });

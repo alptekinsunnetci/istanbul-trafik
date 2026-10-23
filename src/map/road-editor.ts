@@ -1,12 +1,13 @@
 import type { ResourceKind } from '../core/constants';
 import { diagonalRuns } from './geometry';
 import { type Dir, type Grid, Terrain, dirBetween, opposite } from './grid';
+import { L } from '../core/i18n';
 
 /** Countable building pieces: one piece per cell. */
 export type Resources = Record<ResourceKind, number>;
 
 export function noResources(): Resources {
-  return { roads: 0, bridges: 0, boulevards: 0, lights: 0, roundabouts: 0, lines: 0 };
+  return { roads: 0, bridges: 0, boulevards: 0, lights: 0, roundabouts: 0, lines: 0, parkings: 0 };
 }
 
 export const UNLIMITED: Resources = {
@@ -16,6 +17,7 @@ export const UNLIMITED: Resources = {
   lights: 1e9,
   roundabouts: 1e9,
   lines: 1e9,
+  parkings: 1e9,
 };
 
 export interface EditResult {
@@ -65,6 +67,7 @@ function addTo(a: Resources, b: Resources, sign = 1): void {
   a.lights += sign * b.lights;
   a.roundabouts += sign * b.roundabouts;
   a.lines += sign * b.lines;
+  a.parkings += sign * b.parkings;
 }
 
 /**
@@ -147,8 +150,8 @@ function stepDir(grid: Grid, a: number, b: number): Dir | null {
 }
 
 function buildBlockReason(grid: Grid, i: number): string | null {
-  if (grid.building[i] !== -1) return 'Binaların üzerine yol yapılamaz';
-  if (grid.terrain[i] === Terrain.Park) return 'Parklara yol yapılamaz';
+  if (grid.building[i] !== -1) return L('Binaların üzerine yol yapılamaz', 'Roads cannot go over buildings');
+  if (grid.terrain[i] === Terrain.Park) return L('Parklara yol yapılamaz', 'Roads cannot go through parks');
   return null;
 }
 
@@ -199,7 +202,10 @@ export function previewBuild(grid: Grid, stroke: readonly number[], budget: Reso
         spent.bridges++;
         cells.push({ cell: c, valid: true, overpass: true });
       } else {
-        message ??= 'Köprü parçası yok: otoyolla kavşak yapılacak';
+        message ??= L(
+          'Köprü parçası yok: otoyolla kavşak yapılacak',
+          'No bridge pieces: this makes a junction with the highway',
+        );
         cells.push({ cell: c, valid: true });
       }
       continue;
@@ -212,7 +218,10 @@ export function previewBuild(grid: Grid, stroke: readonly number[], budget: Reso
       message = reason;
       blocked = true;
     } else if (kind && spent[kind] + 1 > budget[kind]) {
-      message = kind === 'bridges' ? 'Köprü parçası kalmadı' : 'Yol parçası kalmadı';
+      message =
+        kind === 'bridges'
+          ? L('Köprü parçası kalmadı', 'No bridge pieces left')
+          : L('Yol parçası kalmadı', 'No road pieces left');
       blocked = true;
     }
     if (!blocked && kind) spent[kind]++;
@@ -312,8 +321,11 @@ export function eraseRoad(grid: Grid, stroke: readonly number[]): EditResult {
   }
   if (changed > 0) grid.touch();
   const result: EditResult = { ok: changed > 0, spent, changed };
-  if (lockedHit) result.message = highwayHit ? 'Otoyol silinemez' : 'Bina girişleri silinemez';
-  else if (changed === 0) result.message = 'Silinecek yol yok';
+  if (lockedHit)
+    result.message = highwayHit
+      ? L('Otoyol silinemez', 'Highways cannot be erased')
+      : L('Bina girişleri silinemez', 'Building entrances cannot be erased');
+  else if (changed === 0) result.message = L('Silinecek yol yok', 'Nothing to erase');
   return result;
 }
 
@@ -326,7 +338,12 @@ export function setBoulevard(grid: Grid, stroke: readonly number[], budget: Reso
   const roads = [...new Set(stroke)].filter((c) => grid.isRoad(c) && !grid.isHighway(c));
   const spent = noResources();
   if (roads.length === 0)
-    return { ok: false, spent, changed: 0, message: 'Bulvarı mevcut bir yolun üstüne çizin' };
+    return {
+      ok: false,
+      spent,
+      changed: 0,
+      message: L('Bulvarı mevcut bir yolun üstüne çizin', 'Draw the boulevard over an existing road'),
+    };
   const downgrade = grid.lanes[roads[0] as number] === 2;
   let changed = 0;
   let message: string | undefined;
@@ -339,7 +356,7 @@ export function setBoulevard(grid: Grid, stroke: readonly number[], budget: Reso
       }
     } else if (grid.lanes[c] === 1) {
       if (spent.boulevards + 1 > budget.boulevards) {
-        message = 'Bulvar parçası kalmadı';
+        message = L('Bulvar parçası kalmadı', 'No boulevard pieces left');
         break;
       }
       spent.boulevards++;
@@ -350,7 +367,10 @@ export function setBoulevard(grid: Grid, stroke: readonly number[], budget: Reso
   if (changed > 0) grid.touch();
   const result: EditResult = { ok: message === undefined && changed > 0, spent, changed };
   if (message !== undefined) result.message = message;
-  else if (changed === 0) result.message = downgrade ? 'Değişiklik yok' : 'Bu yollar zaten bulvar';
+  else if (changed === 0)
+    result.message = downgrade
+      ? L('Değişiklik yok', 'No change')
+      : L('Bu yollar zaten bulvar', 'These roads are boulevards already');
   return result;
 }
 
@@ -372,7 +392,7 @@ export function toggleOneWay(grid: Grid, stroke: readonly number[]): EditResult 
       ok: false,
       spent: noResources(),
       changed: 0,
-      message: 'Tek yön için bağlı bir yol boyunca sürükleyin',
+      message: L('Tek yön için bağlı bir yol boyunca sürükleyin', 'Drag along a connected road for one-way'),
     };
   }
   const alreadyOneWay = pairs.every((p) => grid.hasLink(p.a, p.d) && !grid.hasLink(p.b, opposite(p.d)));
@@ -385,7 +405,7 @@ export function toggleOneWay(grid: Grid, stroke: readonly number[]): EditResult 
     ok: true,
     spent: noResources(),
     changed: pairs.length,
-    message: alreadyOneWay ? 'Çift yön' : 'Tek yön',
+    message: alreadyOneWay ? L('Çift yön', 'Two-way') : L('Tek yön', 'One-way'),
   };
 }
 
@@ -397,17 +417,34 @@ export function toggleSignal(grid: Grid, stroke: readonly number[], budget: Reso
   const spent = noResources();
   const c = stroke[0];
   if (c === undefined || !grid.isRoad(c))
-    return { ok: false, spent, changed: 0, message: 'Trafik ışığını bir kavşağa koyun' };
+    return {
+      ok: false,
+      spent,
+      changed: 0,
+      message: L('Trafik ışığını bir kavşağa koyun', 'Put the traffic light on a junction'),
+    };
   if (grid.signal[c] === 1) {
     grid.signal[c] = 0;
     spent.lights = -1;
     grid.touch();
-    return { ok: true, spent, changed: 1, message: 'Trafik ışığı kaldırıldı' };
+    return { ok: true, spent, changed: 1, message: L('Trafik ışığı kaldırıldı', 'Traffic light removed') };
   }
   if (grid.degree(c) < 3 || grid.overpass[c] === 1)
-    return { ok: false, spent, changed: 0, message: 'Trafik ışığı yalnızca kavşağa konur' };
-  if (grid.roundabout[c] === 1) return { ok: false, spent, changed: 0, message: 'Bu kavşakta göbek var' };
-  if (budget.lights < 1) return { ok: false, spent, changed: 0, message: 'Trafik ışığı kalmadı' };
+    return {
+      ok: false,
+      spent,
+      changed: 0,
+      message: L('Trafik ışığı yalnızca kavşağa konur', 'A traffic light only goes on a junction'),
+    };
+  if (grid.roundabout[c] === 1)
+    return {
+      ok: false,
+      spent,
+      changed: 0,
+      message: L('Bu kavşakta göbek var', 'This junction has a roundabout'),
+    };
+  if (budget.lights < 1)
+    return { ok: false, spent, changed: 0, message: L('Trafik ışığı kalmadı', 'No traffic lights left') };
   grid.signal[c] = 1;
   spent.lights = 1;
   grid.touch();
@@ -422,18 +459,41 @@ export function toggleRoundabout(grid: Grid, stroke: readonly number[], budget: 
   const spent = noResources();
   const c = stroke[0];
   if (c === undefined || !grid.isRoad(c))
-    return { ok: false, spent, changed: 0, message: 'Göbeği bir kavşağa koyun' };
+    return {
+      ok: false,
+      spent,
+      changed: 0,
+      message: L('Göbeği bir kavşağa koyun', 'Put the roundabout on a junction'),
+    };
   if (grid.roundabout[c] === 1) {
     grid.roundabout[c] = 0;
     spent.roundabouts = -1;
     grid.touch();
-    return { ok: true, spent, changed: 1, message: 'Göbek kaldırıldı' };
+    return { ok: true, spent, changed: 1, message: L('Göbek kaldırıldı', 'Roundabout removed') };
   }
   if (grid.degree(c) < 3 || grid.overpass[c] === 1)
-    return { ok: false, spent, changed: 0, message: 'Göbek yalnızca kavşağa konur' };
-  if (grid.isHighway(c)) return { ok: false, spent, changed: 0, message: 'Otoyola göbek konmaz' };
-  if (grid.signal[c] === 1) return { ok: false, spent, changed: 0, message: 'Önce trafik ışığını kaldırın' };
-  if (budget.roundabouts < 1) return { ok: false, spent, changed: 0, message: 'Göbek kalmadı' };
+    return {
+      ok: false,
+      spent,
+      changed: 0,
+      message: L('Göbek yalnızca kavşağa konur', 'A roundabout only goes on a junction'),
+    };
+  if (grid.isHighway(c))
+    return {
+      ok: false,
+      spent,
+      changed: 0,
+      message: L('Otoyola göbek konmaz', 'No roundabouts on a highway'),
+    };
+  if (grid.signal[c] === 1)
+    return {
+      ok: false,
+      spent,
+      changed: 0,
+      message: L('Önce trafik ışığını kaldırın', 'Remove the traffic light first'),
+    };
+  if (budget.roundabouts < 1)
+    return { ok: false, spent, changed: 0, message: L('Göbek kalmadı', 'No roundabouts left') };
   grid.roundabout[c] = 1;
   spent.roundabouts = 1;
   grid.touch();

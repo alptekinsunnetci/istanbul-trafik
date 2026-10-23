@@ -120,4 +120,34 @@ describe('ferry and metro lines', () => {
     expect(s.resources.lines).toBe(1);
     s.dispose();
   });
+
+  it('removing a line sends every passenger back home to drive instead', () => {
+    const s = new GameSession({ districtId: 'beyoglu', seed: 3 });
+    const g = s.sim.grid;
+    s.bounds = { x0: 0, y0: 0, x1: g.width - 1, y1: g.height - 1 };
+    expect(s.edit('transit', [g.idx(10, 20), g.idx(25, 25)]).ok).toBe(true);
+    const [a, b] = s.sim.buildings.filter((x) => x.kind === 'durak') as [Building, Building];
+    const house = s.sim.buildings.find((x) => x.kind === 'konut')!;
+    const work = s.sim.buildings.find((x) => x.kind === 'ticari')!;
+    const before = house.pending.length;
+    b.transit!.riders.push({
+      trip: { id: 1, origin: house.id, destination: work.id, createdAt: 0 },
+      readyAt: 99,
+    });
+    b.pending.push({
+      id: 2,
+      origin: b.id,
+      destination: work.id,
+      createdAt: 0,
+      passengers: 3,
+      kind: 'otobus',
+      homes: [house.id, house.id, house.id],
+    });
+    const pinsBefore = pinsAt(s.sim.buildings, work);
+    expect(s.edit('transit', [g.idx(a.x, a.y)]).ok).toBe(true);
+    expect(house.pending.length).toBe(before + 4);
+    // Nobody disappears: the workplace still waits for the same number of people.
+    expect(pinsAt(s.sim.buildings, work)).toBe(pinsBefore);
+    s.dispose();
+  });
 });

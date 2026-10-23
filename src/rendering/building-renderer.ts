@@ -144,6 +144,29 @@ export function drawStations(
       alpha: 0.75,
     });
   }
+  // Car parks: a grey lot with a white "P", next to their workplace.
+  for (const b of buildings) {
+    if (b.kind !== 'otopark') continue;
+    const x = b.x * C + 1.5;
+    const y = b.y * C + 1.5;
+    const s = C - 3;
+    const doorX = ((b.door % gridWidth) + 0.5) * C;
+    const doorY = (Math.floor(b.door / gridWidth) + 0.5) * C;
+    g.moveTo(doorX, doorY)
+      .lineTo((b.x + 0.5) * C, (b.y + 0.5) * C)
+      .stroke({ width: DRIVEWAY, color: theme.road });
+    g.roundRect(x, y, s, s, 2.5)
+      .fill(0x5b6472)
+      .stroke({ width: 1, color: groupColor(theme, b.color) });
+    const cx = x + s / 2;
+    const cy = y + s / 2;
+    g.moveTo(cx - 2.2, cy + 3.6)
+      .lineTo(cx - 2.2, cy - 3.6)
+      .lineTo(cx + 0.8, cy - 3.6)
+      .arc(cx + 0.8, cy - 1.6, 2, -Math.PI / 2, Math.PI / 2)
+      .lineTo(cx - 2.2, cy + 0.4)
+      .stroke({ width: 1.5, color: 0xffffff, join: 'round', cap: 'round' });
+  }
   for (const b of buildings) {
     const t = b.transit;
     if (!t) continue;

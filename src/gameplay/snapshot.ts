@@ -1,4 +1,6 @@
 import { buildingCells } from '../core/world-state';
+import { customDistrict, decodeMap } from '../map/custom-map';
+import { registerDistrict } from '../map/districts';
 import { DIRS, Terrain } from '../map/grid';
 import { SAVE_VERSION, type SavedGame } from '../persistence/save-schema';
 import { base64ToBytes, bytesToBase64 } from '../persistence/validate';
@@ -35,6 +37,13 @@ export function toSnapshot(session: GameSession, now: Date = new Date()): SavedG
     demandReassign: sim.demand.reassignTimer,
     nextVehicleId: sim.nextVehicleId,
     nextTripId: sim.nextTripId,
+    ...(session.district.code ? { customMap: session.district.code } : {}),
+    ambience: {
+      nextGullAt: session.nextGullAt,
+      nextEventAt: session.nextEventAt,
+      gull: session.gull ? { ...session.gull } : null,
+      event: session.event ? { ...session.event } : null,
+    },
     grid: {
       road: bytesToBase64(g.road),
       links: bytesToBase64(g.links),
@@ -59,6 +68,8 @@ export function toSnapshot(session: GameSession, now: Date = new Date()): SavedG
  * that a corrupt save never produces an inconsistent world.
  */
 export function restoreSession(save: SavedGame): GameSession {
+  // A map editor game brings its own map along.
+  if (save.customMap) registerDistrict(customDistrict(decodeMap(save.customMap)));
   const session = new GameSession({
     districtId: save.districtId,
     seed: save.seed,
@@ -203,4 +214,10 @@ function applySnapshot(session: GameSession, save: SavedGame): void {
   session.score.load(save.score);
   session.growthRng.setState(save.growthRng);
   session.phase = save.phase;
+  if (save.ambience) {
+    session.nextGullAt = save.ambience.nextGullAt;
+    session.nextEventAt = save.ambience.nextEventAt;
+    session.gull = save.ambience.gull ? { ...save.ambience.gull } : null;
+    if (save.ambience.event) session.resumeEvent({ ...save.ambience.event });
+  }
 }

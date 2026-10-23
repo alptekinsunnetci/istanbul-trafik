@@ -13,7 +13,8 @@ export type SoundName =
   | 'invalid'
   | 'gull'
   | 'horn'
-  | 'collect';
+  | 'collect'
+  | 'ferry';
 
 interface Tone {
   freq: number;
@@ -48,6 +49,13 @@ const SOUNDS: Record<SoundName, Tone[]> = {
     { freq: 523, dur: 0.22, type: 'square', gain: 0.035 },
     { freq: 415, dur: 0.14, type: 'square', gain: 0.04, delay: 0.3 },
     { freq: 523, dur: 0.14, type: 'square', gain: 0.03, delay: 0.3 },
+  ],
+  // A ferry horn: one long and one short low blast.
+  ferry: [
+    { freq: 174, dur: 1.1, type: 'sawtooth', gain: 0.05 },
+    { freq: 220, dur: 1.1, type: 'triangle', gain: 0.07 },
+    { freq: 174, dur: 0.45, type: 'sawtooth', gain: 0.05, delay: 1.3 },
+    { freq: 220, dur: 0.45, type: 'triangle', gain: 0.07, delay: 1.3 },
   ],
   collect: [
     { freq: 660, to: 990, dur: 0.12, type: 'triangle', gain: 0.25 },

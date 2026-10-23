@@ -54,10 +54,12 @@ import { pinsAt } from '../traffic/demand-generator';
 import { growthAddsWorkplace, growthInterval } from './difficulty';
 import { type GameSummary, summarize } from './game-over';
 import { ScoreKeeper } from './scoring';
+import { L } from '../core/i18n';
 
 export type SessionPhase = 'ready' | 'running' | 'over';
 
-export type EditTool = 'road' | 'boulevard' | 'oneway' | 'erase' | 'signal' | 'roundabout' | 'transit';
+export type EditTool =
+  'road' | 'boulevard' | 'oneway' | 'erase' | 'signal' | 'roundabout' | 'transit' | 'parking';
 
 export type Orientation = 'wide' | 'tall';
 
@@ -87,6 +89,8 @@ export interface SessionEvents {
   horn: undefined;
   /** People who came by ferry or metro reached their workplace. */
   transitDelivered: number;
+  /** A ferry arrives at a pier (its horn sounds). */
+  ferryArrive: undefined;
 }
 
 export type CityEventKind = 'mac' | 'yagmur' | 'yol';
@@ -183,13 +187,15 @@ export class GameSession {
   private undoStack: RoadSnapshot[] = [];
   /** The gull currently flying, if any. */
   gull: Gull | null = null;
-  private nextGullAt: number = AMBIENCE.gullFirst;
+  /** When the next gull may appear (saved, so a reload does not change it). */
+  nextGullAt: number = AMBIENCE.gullFirst;
   private readonly ambienceRng: Random;
   /** Open-water cells (water all around), where gulls fly. */
   private readonly openWater: number[] = [];
   /** The city event going on, if any. */
   event: CityEvent | null = null;
-  private nextEventAt = (EVENTS.firstWeek - 1) * ECONOMY.weekLength + 20;
+  /** When the next city event may start (saved). */
+  nextEventAt = (EVENTS.firstWeek - 1) * ECONOMY.weekLength + 20;
   private hornBursts = 0;
   private nextHornAt = 0;
   private calmSince = 0;
@@ -241,6 +247,7 @@ export class GameSession {
       lights: ECONOMY.startLights,
       roundabouts: ECONOMY.startRoundabouts,
       lines: ECONOMY.startLines,
+      parkings: ECONOMY.startParkings,
     };
     this.unsubscribers.push(
       this.sim.events.on('tripCompleted', (e) => {
@@ -302,7 +309,12 @@ export class GameSession {
     const first = cells[0];
     const last = cells[cells.length - 1];
     if (first === undefined || last === undefined)
-      return { ok: false, spent: none, changed: 0, message: 'Hat için iki yer arasında sürükleyin' };
+      return {
+        ok: false,
+        spent: none,
+        changed: 0,
+        message: L('Hat için iki yer arasında sürükleyin', 'Drag between two places for a line'),
+      };
     const tapped = this.sim.buildingById(g.building[first] as number);
     const short = Math.hypot(g.cx(first) - g.cx(last), g.cy(first) - g.cy(last)) < TRANSIT.minLength;
     if (tapped?.kind === 'durak' && short) return this.removeLine(tapped);
@@ -311,10 +323,18 @@ export class GameSession {
         ok: false,
         spent: none,
         changed: 0,
-        message: `Hat en az ${TRANSIT.minLength} hücre uzun olmalı`,
+        message: L(
+          `Hat en az ${TRANSIT.minLength} hücre uzun olmalı`,
+          `A line must be at least ${TRANSIT.minLength} cells long`,
+        ),
       };
     if (this.resources.lines < 1)
-      return { ok: false, spent: none, changed: 0, message: 'Vapur/metro hattı kalmadı' };
+      return {
+        ok: false,
+        spent: none,
+        changed: 0,
+        message: L('Vapur/metro hattı kalmadı', 'No ferry/metro lines left'),
+      };
     const mode = this.lineMode(first, last);
     const a = this.stationSite(first, mode);
     const b = a ? this.stationSite(last, mode) : null;
@@ -324,7 +344,9 @@ export class GameSession {
         spent: none,
         changed: 0,
         message:
-          mode === 'vapur' ? 'İskele için iki kıyıda da boş yer gerekir' : 'İstasyon için boş yer bulunamadı',
+          mode === 'vapur'
+            ? L('İskele için iki kıyıda da boş yer gerekir', 'A ferry needs free space on both shores')
+            : L('İstasyon için boş yer bulunamadı', 'No free space for a station'),
       };
     const used = new Set(this.sim.buildings.map((x) => x.name));
     const nextId = this.sim.buildings.reduce((m, x) => Math.max(m, x.id), -1) + 1;
@@ -343,7 +365,12 @@ export class GameSession {
     const sa = make(nextId, nextId + 1, a);
     if (g.building[b.door] !== -1 || g.building[g.idx(b.x, b.y)] !== -1) {
       this.dropStation(sa);
-      return { ok: false, spent: none, changed: 0, message: 'İstasyon için boş yer bulunamadı' };
+      return {
+        ok: false,
+        spent: none,
+        changed: 0,
+        message: L('İstasyon için boş yer bulunamadı', 'No free space for a station'),
+      };
     }
     const sb = make(nextId + 1, nextId, b);
     this.resources.lines--;
@@ -356,25 +383,108 @@ export class GameSession {
       ok: true,
       spent: { ...none, lines: 1 },
       changed: 1,
-      message: `${mode === 'vapur' ? 'Vapur' : 'Metro'} hattı açıldı`,
+      message:
+        mode === 'vapur'
+          ? L('Vapur hattı açıldı', 'Ferry line opened')
+          : L('Metro hattı açıldı', 'Metro line opened'),
+    };
+  }
+
+  // ----------------------------------------------------------------- parking
+
+  /**
+   * The car park tool: tapping a workplace puts a car park next to it (a
+   * second entrance: arriving cars use whichever entrance is cheaper to
+   * reach); tapping a car park removes it.
+   */
+  private parkingEdit(raw: readonly number[]): EditResult {
+    const none = noResources();
+    const g = this.sim.grid;
+    const first = raw.find((c) => c >= 0);
+    const hit = first === undefined ? undefined : this.sim.buildingById(g.building[first] as number);
+    if (hit?.kind === 'otopark') {
+      this.dropStation(hit);
+      this.resources.parkings++;
+      this.undoStack = [];
+      this.settle();
+      return {
+        ok: true,
+        spent: { ...none, parkings: -1 },
+        changed: 1,
+        message: L('Otopark kaldırıldı', 'Car park removed'),
+      };
+    }
+    if (hit?.kind !== 'ticari')
+      return {
+        ok: false,
+        spent: none,
+        changed: 0,
+        message: L('Otoparkı bir iş yerinin üstüne dokunarak kur', 'Tap a workplace to build its car park'),
+      };
+    if (this.resources.parkings < 1)
+      return { ok: false, spent: none, changed: 0, message: L('Otopark kalmadı', 'No car parks left') };
+    const site = findSite(g, this.sim.buildings, 'otopark', this.ambienceRng, {
+      center: [hit.x + 0.5, hit.y + 0.5],
+      minRadius: 1.5,
+      maxRadius: 3.2,
+      minDistance: 0,
+      attempts: 160,
+      bounds: this.bounds,
+    });
+    if (!site)
+      return {
+        ok: false,
+        spent: none,
+        changed: 0,
+        message: L('İş yerinin yanında boş yer yok', 'No free space next to the workplace'),
+      };
+    const id = this.sim.buildings.reduce((m, x) => Math.max(m, x.id), -1) + 1;
+    const lot = makeBuilding(id, 'otopark', hit.color, site, `${hit.name} Otoparkı`, this.sim.time);
+    lot.parkingFor = hit.id;
+    placeBuilding(g, lot);
+    this.sim.buildings.push(lot);
+    this.resources.parkings--;
+    this.undoStack = [];
+    this.settle();
+    this.events.emit('buildingAdded', lot.id);
+    return {
+      ok: true,
+      spent: { ...none, parkings: 1 },
+      changed: 1,
+      message: L('Otopark kuruldu: yolunu girişine bağla', 'Car park built: connect a road to its entrance'),
     };
   }
 
   /** Removes a line: passengers on it go back home and wait for a car instead. */
   private removeLine(station: Building): EditResult {
     const partner = this.sim.buildingById(station.transit?.partner ?? -1);
+    // Everyone on the line or waiting for a bus or taxi goes back home and takes the car.
+    const sendHome = (houseId: number, destination: number): void => {
+      const home = this.sim.buildingById(houseId);
+      if (home?.kind !== 'konut') return;
+      home.pending.push({
+        id: this.sim.nextTripId++,
+        origin: home.id,
+        destination,
+        createdAt: this.sim.time,
+      });
+    };
     for (const st of [station, partner]) {
       if (!st) continue;
-      for (const r of st.transit?.riders ?? []) {
-        const home = this.sim.buildingById(r.trip.origin);
-        if (home?.kind === 'konut') home.pending.push({ ...r.trip, createdAt: this.sim.time });
-      }
+      for (const r of st.transit?.riders ?? []) sendHome(r.trip.origin, r.trip.destination);
+      for (const t of st.pending) for (const h of t.homes ?? []) sendHome(h, t.destination);
+      st.pending = [];
       this.dropStation(st);
     }
     this.resources.lines++;
     this.undoStack = [];
     this.settle();
-    return { ok: true, spent: { ...noResources(), lines: -1 }, changed: 1, message: 'Hat kaldırıldı' };
+    return {
+      ok: true,
+      spent: { ...noResources(), lines: -1 },
+      changed: 1,
+      message: L('Hat kaldırıldı', 'Line removed'),
+    };
   }
 
   private dropStation(st: Building): void {
@@ -410,10 +520,23 @@ export class GameSession {
       if (works.length === 0) return;
       const w = rng.pick(works);
       this.sim.demand.boosts.set(w.id, EVENTS.matchBoost);
-      this.startEvent({ kind, until, target: w.id, text: `Maç günü! ${w.name} çevresinde trafik artıyor.` });
+      this.startEvent({
+        kind,
+        until,
+        target: w.id,
+        text: L(
+          `Maç günü! ${w.name} çevresinde trafik artıyor.`,
+          `Match day! Traffic is building up around ${w.name}.`,
+        ),
+      });
     } else if (kind === 'yagmur') {
       this.sim.speedScale = EVENTS.rainSpeed;
-      this.startEvent({ kind, until, target: -1, text: 'Yağmur başladı: araçlar yavaşladı.' });
+      this.startEvent({
+        kind,
+        until,
+        target: -1,
+        text: L('Yağmur başladı: araçlar yavaşladı.', 'Rain: all cars slow down.'),
+      });
     } else {
       const cells: number[] = [];
       for (let i = 0; i < grid.size; i++) {
@@ -429,9 +552,27 @@ export class GameSession {
         kind,
         until,
         target: c,
-        text: 'Yol çalışması: bir yol bir süre kapalı, araçlar başka yoldan gider.',
+        text: L(
+          'Yol çalışması: bir yol bir süre kapalı, araçlar başka yoldan gider.',
+          'Road works: a road is closed for a while, cars take another way.',
+        ),
       });
     }
+  }
+
+  /** Puts a saved event back in force (used when loading a game). */
+  resumeEvent(ev: CityEvent): void {
+    this.event = null;
+    if (ev.kind === 'mac') {
+      if (!this.sim.buildingById(ev.target)) return;
+      this.sim.demand.boosts.set(ev.target, EVENTS.matchBoost);
+    } else if (ev.kind === 'yagmur') this.sim.speedScale = EVENTS.rainSpeed;
+    else {
+      if (!this.sim.grid.isRoad(ev.target)) return;
+      this.sim.grid.closed[ev.target] = 1;
+      this.settle();
+    }
+    this.event = ev;
   }
 
   private startEvent(ev: CityEvent): void {
@@ -532,8 +673,14 @@ export class GameSession {
     this.events.emit('notice', {
       kind: 'info',
       text: gridlock
-        ? 'Bir kavşak kilitlendi. İkinci bir yol aç ya da kavşağa trafik ışığı koy (Işık).'
-        : 'Kuyruk uzuyor: kalabalık kavşağa trafik ışığı koyabilirsin (Işık).',
+        ? L(
+            'Bir kavşak kilitlendi. İkinci bir yol aç ya da kavşağa trafik ışığı koy (Işık).',
+            'A junction locked up. Open a second road or put a traffic light on it (Light).',
+          )
+        : L(
+            'Kuyruk uzuyor: kalabalık kavşağa trafik ışığı koyabilirsin (Işık).',
+            'The queue is growing: you can put a traffic light on the busy junction (Light).',
+          ),
     });
   }
 
@@ -561,6 +708,12 @@ export class GameSession {
       this.lightTip(false);
     this.updateGull();
     this.updateEvent();
+    // Ferries run to a timetable: each arrival sounds the horn once.
+    const trip = Math.floor(this.sim.time / TRANSIT.ferryEvery);
+    if (trip !== Math.floor((this.sim.time - DT) / TRANSIT.ferryEvery)) {
+      if (this.sim.buildings.some((b) => b.transit?.mode === 'vapur'))
+        this.events.emit('ferryArrive', undefined);
+    }
     if (this.sim.tick % 20 === 0) this.updateHorns();
 
     if (time >= this.nextGrowthAt) {
@@ -570,7 +723,13 @@ export class GameSession {
 
     if (!this.rules.endless) {
       const full = this.sim.buildings.find((b) => b.kind === 'ticari' && b.overflow >= 1);
-      if (full) this.finish(`${full.name} taştı: bekleyen yolculuklar çok birikti.`);
+      if (full)
+        this.finish(
+          L(
+            `${full.name} taştı: bekleyen yolculuklar çok birikti.`,
+            `${full.name} overflowed: too many trips piled up.`,
+          ),
+        );
     }
   }
 
@@ -719,6 +878,7 @@ export class GameSession {
         }
       }
       const city = sim.buildings.filter((x) => x.kind === 'konut' || x.kind === 'ticari');
+      // (car parks, stations and gateways are not neighbourhoods to grow from)
       const sameColor = city.filter((x) => x.color === bestColor);
       const anchor = this.growthRng.pick(sameColor.length > 0 ? sameColor : city);
       const across =
@@ -917,7 +1077,11 @@ export class GameSession {
         spent: noResources(),
       };
       if (cells.length > 1)
-        p.message = long ? `${this.lineMode(a, b) === 'vapur' ? 'Vapur' : 'Metro'} hattı` : 'Hat çok kısa';
+        p.message = long
+          ? this.lineMode(a, b) === 'vapur'
+            ? L('Vapur hattı', 'Ferry line')
+            : L('Metro hattı', 'Metro line')
+          : L('Hat çok kısa', 'Line too short');
       return p;
     }
     const { cells: stroke, clipped } = this.prepareStroke(tool, rawStroke);
@@ -929,13 +1093,15 @@ export class GameSession {
       const ok = c !== undefined && grid.isRoad(c) && (grid.signal[c] === 1 || grid.degree(c) >= 3);
       p = { cells: c === undefined ? [] : [{ cell: c, valid: ok }], spent: noResources() };
     } else p = { cells: stroke.map((c) => ({ cell: c, valid: grid.isRoad(c) })), spent: noResources() };
-    if (clipped && !p.message) p.message = 'Şehrin sınırına ulaştın';
+    if (clipped && !p.message) p.message = L('Şehrin sınırına ulaştın', 'You reached the edge of the city');
     return p;
   }
 
   edit(tool: EditTool, rawStroke: readonly number[]): EditResult {
-    if (!this.editable) return { ok: false, spent: noResources(), changed: 0, message: 'Oyun bitti' };
+    if (!this.editable)
+      return { ok: false, spent: noResources(), changed: 0, message: L('Oyun bitti', 'Game over') };
     if (tool === 'transit') return this.transitEdit(rawStroke);
+    if (tool === 'parking') return this.parkingEdit(rawStroke);
     const grid = this.sim.grid;
     const before = this.snapshotRoads();
     const { cells: stroke, clipped, rotated } = this.prepareStroke(tool, rawStroke, true);
@@ -945,7 +1111,9 @@ export class GameSession {
         ok: false,
         spent: noResources(),
         changed: rotated ? 1 : 0,
-        message: clipped ? 'Şehrin sınırına ulaştın' : 'Geçersiz konum',
+        message: clipped
+          ? L('Şehrin sınırına ulaştın', 'You reached the edge of the city')
+          : L('Geçersiz konum', 'Not possible here'),
       };
     }
     let result: EditResult;
@@ -970,7 +1138,11 @@ export class GameSession {
         break;
     }
     if (clipped && result.ok && tool === 'road') {
-      result = { ...result, ok: false, message: 'Şehrin sınırına ulaştın' };
+      result = {
+        ...result,
+        ok: false,
+        message: L('Şehrin sınırına ulaştın', 'You reached the edge of the city'),
+      };
     }
     if (result.changed > 0 || rotated) {
       this.resources.roads -= result.spent.roads;
@@ -1048,7 +1220,10 @@ export class GameSession {
     if (net.failedVehicles > 0) {
       this.events.emit('notice', {
         kind: 'info',
-        text: `${net.failedVehicles} araç silinen yoldan geri döndü.`,
+        text: L(
+          `${net.failedVehicles} araç silinen yoldan geri döndü.`,
+          `${net.failedVehicles} vehicles turned back from an erased road.`,
+        ),
       });
     }
     this.events.emit('networkChanged', undefined);

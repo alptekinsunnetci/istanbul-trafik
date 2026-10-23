@@ -1,5 +1,6 @@
 import { hashString } from '../core/random';
 import { DISTRICTS } from '../map/districts';
+import { L } from '../core/i18n';
 
 export interface DailyMap {
   /** Local date, YYYY-MM-DD. */
@@ -31,5 +32,5 @@ export function dailyMap(now: Date): DailyMap {
 
 /** Text to share a daily result. */
 export function dailyShareText(map: DailyMap, districtName: string, score: number, url: string): string {
-  return `İstanbul Trafik · Günün haritası ${map.label} · ${districtName} · ${score} yolculuk\n${url}`;
+  return `İstanbul Trafik · ${L('Günün haritası', 'Daily map')} ${map.label} · ${districtName} · ${score} ${L('yolculuk', 'trips')}\n${url}`;
 }

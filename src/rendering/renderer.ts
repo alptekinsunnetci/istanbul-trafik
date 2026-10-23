@@ -11,6 +11,7 @@ import { drawTerrain, placeHighwaySigns, placeLabels } from './map-renderer';
 import { drawRoads } from './road-renderer';
 import { DEFAULT_THEME, HIGH_CONTRAST_THEME, type Theme, districtTheme, groupColor, seasonOf } from './theme';
 import { PathCache, VehicleRenderer } from './vehicle-renderer';
+import { L } from '../core/i18n';
 
 export interface RenderOptions {
   highContrast: boolean;
@@ -113,7 +114,7 @@ export class Renderer {
       throw new UnsupportedRendererError(err);
     }
     app.ticker.stop();
-    app.canvas.setAttribute('aria-label', 'Şehir haritası');
+    app.canvas.setAttribute('aria-label', L('Şehir haritası', 'City map'));
     app.canvas.setAttribute('role', 'img');
     app.canvas.tabIndex = 0;
     host.appendChild(app.canvas);

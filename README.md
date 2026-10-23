@@ -10,6 +10,9 @@ simülasyonu ve şehir planlama oyunu.
 >
 > Bilgisayarda ve telefonda çalışır. Aşağıdaki kurulum adımları yalnızca projeyi geliştirmek veya
 > kendi sunucunuzda yayınlamak isteyenler içindir.
+>
+> **English:** the game is also available in English. It follows your browser's language; you can
+> switch it in the settings (Dil / Language) or open the demo with `?lang=en`.
 
 Her iş yerinin bir rengi ve sembolü vardır; aynı renkteki evlerden arabalar oraya gider. Oyuncu
 evleri iş yerlerine yolla bağlar. İş yerlerinde bekleyen yolculuklar (raptiyeler) birikir; biri
@@ -47,7 +50,15 @@ yeni renkler eklenir.
 - **Başarımlar ve günün haritası:** 17 başarım (ilk köprü, ilk üst geçit, 10 martı …) menüden
   izlenir. Günün haritası herkes için aynı ilçe ve aynı tohumdur, her gün değişir; sonucu "Paylaş" ile
   paylaşabilirsin.
+- **Otopark:** Otopark aracıyla bir iş yerine dokun; yanına ikinci bir girişi olan bir otopark kurulur.
+  Gelen araçlar hangi girişe daha kolay ulaşıyorsa oraya gider, böylece tek kapıdaki kuyruk azalır.
+- **Harita düzenleyici:** Menüden aç; kara, su ve park boya, otoyol çiz, başlangıç noktasını seç (ya da
+  bir ilçeyi şablon al). "Oyna" ile hemen oyna, "Bağlantıyı kopyala" ile haritayı bir bağlantıyla
+  paylaş; bağlantıyı açan kişi haritayı düzenleyicide görür.
+- **Türkçe ve İngilizce:** Arayüz tarayıcının diline göre açılır, ayarlardan değiştirilebilir.
+  Yer adları (ilçe, mahalle, deniz, otoyol) Türkçe kalır.
 - **Araçlar:** Otomobil, taksi (sarı tepe lambası), dolmuş (beyaz tavan) ve otobüs ayrı görünür.
+- **Vapur düdüğü:** Vapur hattı varsa her sefer iskeleye yanaşırken vapur düdüğü duyulur.
 - **Müzik ve çevrimdışı oyun:** Hicaz makamında sakin, tarayıcıda üretilen bir arka plan müziği
   (ayarlardan açılıp kısılır). Oyun bir kez açıldıktan sonra internetsiz de çalışır ve telefona
   uygulama gibi eklenebilir.
@@ -69,8 +80,9 @@ yeni renkler eklenir.
 - **Şehir hayatı:** D-100 ve O-1'de belli aralıklarla kendi şeridinde metrobüs geçer. Boğaz'ın ve
   denizin üstünde ara ara martılar uçar ve öter; martıya dokunursan +2 yol parçası kazanırsın. Trafik
   çok sıkışınca kornalar duyulur, ama sınırlıdır: birkaç kez çalar, sıkışıklık geçene kadar susar.
-- **Kolay başlangıç:** Rahat / Normal / Zor modları, isteğe bağlı rehberli öğretici, geri al, büyüyen
-  oyun alanı ve tek seferlik ipuçları.
+- **Kolay başlangıç:** Oyunu ilk açanı kısa bir "nasıl oynanır" penceresi karşılar ve rehberli oyunu
+  önerir. Rahat / Normal / Zor modları, 10 adımlı rehberli öğretici, geri al, büyüyen oyun alanı ve tek
+  seferlik ipuçları. Telefonda ışık, göbek, hat ve otopark "Diğer" düğmesinin altında toplanır.
 
 ## Ekran görüntüleri
 
@@ -176,27 +188,28 @@ npm run test:e2e
 
 ## Nasıl oynanır?
 
-| Kontrol                                    | İşlev                                              |
-| ------------------------------------------ | -------------------------------------------------- |
-| Binadan başlayıp diğer binaya sürükle      | Yol çiz; uçlar binaların girişine yapışır          |
-| Çapraz sürükle                             | 45° çapraz yol                                     |
-| Geri al düğmesi, `Ctrl+Z`                  | Son çizimi geri al, parçalar geri gelir            |
-| Sil düğmesi ya da sağ tık + sürükle        | Yolu sil, parçalar geri gelir                      |
-| Işık düğmesi, sonra kavşağa dokun          | Trafik ışığı koy; tekrar dokununca kalkar          |
-| Göbek düğmesi, sonra kavşağa dokun         | Göbekli kavşak koy; tekrar dokununca kalkar        |
-| Hat düğmesi, iki yer arasında sürükle      | Vapur ya da metro hattı; durağa dokununca kalkar   |
-| Araca veya binaya dokunma                  | Ayrıntıları göster                                 |
-| Uçan martıya dokunma                       | +2 yol parçası                                     |
-| Tekerlek, `+` / `−`, iki parmakla kıstırma | Yakınlaştır / uzaklaştır                           |
-| Orta tık + sürükle, `W A S D`, iki parmak  | Haritayı kaydır                                    |
-| `Boşluk`                                   | Duraklat / devam                                   |
-| `1` … `6`                                  | Yol · Bulvar · Silgi · Işık · Göbek · Hat          |
-| `T` · `I` · `F`                            | Trafik katmanı · İstatistikler · Haritayı sığdır   |
-| `Esc` veya ←                               | Menü (istatistik, yeniden başlat, ayarlar, yardım) |
+| Kontrol                                    | İşlev                                               |
+| ------------------------------------------ | --------------------------------------------------- |
+| Binadan başlayıp diğer binaya sürükle      | Yol çiz; uçlar binaların girişine yapışır           |
+| Çapraz sürükle                             | 45° çapraz yol                                      |
+| Geri al düğmesi, `Ctrl+Z`                  | Son çizimi geri al, parçalar geri gelir             |
+| Sil düğmesi ya da sağ tık + sürükle        | Yolu sil, parçalar geri gelir                       |
+| Işık düğmesi, sonra kavşağa dokun          | Trafik ışığı koy; tekrar dokununca kalkar           |
+| Göbek düğmesi, sonra kavşağa dokun         | Göbekli kavşak koy; tekrar dokununca kalkar         |
+| Hat düğmesi, iki yer arasında sürükle      | Vapur ya da metro hattı; durağa dokununca kalkar    |
+| Araca veya binaya dokunma                  | Ayrıntıları göster                                  |
+| Uçan martıya dokunma                       | +2 yol parçası                                      |
+| Tekerlek, `+` / `−`, iki parmakla kıstırma | Yakınlaştır / uzaklaştır                            |
+| Orta tık + sürükle, `W A S D`, iki parmak  | Haritayı kaydır                                     |
+| `Boşluk`                                   | Duraklat / devam                                    |
+| Otopark düğmesi, sonra iş yerine dokun     | Otopark kur; otoparka dokununca kalkar              |
+| `1` … `7`                                  | Yol · Bulvar · Silgi · Işık · Göbek · Hat · Otopark |
+| `T` · `I` · `F`                            | Trafik katmanı · İstatistikler · Haritayı sığdır    |
+| `Esc` veya ←                               | Menü (istatistik, yeniden başlat, ayarlar, yardım)  |
 
 - **Parçalar:** Her kara hücresi 1 yol parçası, her su hücresi ve her üst geçit 1 köprü parçası kullanır.
   Bulvar (iki şeritli, hızlı yol) mevcut yolun üstüne çizilir ve hücre başına 1 bulvar parçası kullanır.
-  6 köprü, 2 trafik ışığı, 1 göbek ve 1 vapur/metro hattıyla başlanır.
+  6 köprü, 2 trafik ışığı, 1 göbek, 1 vapur/metro hattı ve 1 otoparkla başlanır.
 - Her hafta (90 sn) +20 yol parçası gelir ve iki ödülden biri seçilir (+15 yol, +5 köprü, +10 bulvar,
   +2 trafik ışığı). Oyun seçim yapılana kadar bekler.
 - **Su ve köprüler:** Dereler (Kurbağalıdere, Ayamama, Göksu, Sazlıdere), Haliç ve Boğaz'ın karşı
@@ -214,8 +227,9 @@ npm run test:e2e
   bağlanmak için yolu otoyolun üstünde bitir ya da orada dön.
 - **Zorluk:** Rahat (oyun bitmez, sakin tempo), Normal (varsayılan) ve Zor. Seçim hatırlanır; en iyi
   skorlar ilçe ve mod başına ayrı tutulur.
-- **Oynayarak öğren:** Menüdeki rehberli oyun 7 adımda anlatır (yol çiz, ilk araba, diğer evler, geri
-  al, trafik ışığı, otoyol ve üst geçit, köprü); saat ilk yol bağlanana kadar bekler.
+- **Oynayarak öğren:** Menüdeki rehberli oyun 10 adımda anlatır (yol çiz, ilk araba, diğer evler, geri
+  al, trafik ışığı, göbek, vapur/metro hattı, otoyol ve üst geçit, köprü, günün saati ve olaylar);
+  saat ilk yol bağlanana kadar bekler. İlk ziyarette bir karşılama penceresi bunu önerir.
 - **Büyüyen alan:** Oyun küçük bir alanla başlar (dikey ekranda dikey), her hafta genişler; kamera
   alanı kendiliğinden sığdırır, kaydırma ve yakınlaştırma isteğe bağlıdır.
 - Aynı **harita tohumu** aynı başlangıç haritasını ve trafik akışını üretir.

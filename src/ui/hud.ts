@@ -3,6 +3,7 @@ import type { AppState } from '../app/app-state';
 import { ECONOMY } from '../core/constants';
 import type { GameSession } from '../gameplay/game-session';
 import { formatNumber, h, icon } from './dom';
+import { L, t as translate } from '../core/i18n';
 
 export interface HudActions {
   toggleRun(): void;
@@ -10,8 +11,11 @@ export interface HudActions {
   openMenu(): void;
 }
 
-const DAYS = ['PZT', 'SAL', 'ÇAR', 'PER', 'CUM', 'CMT', 'PAZ'];
-const DAY_NAMES = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+const DAYS = L('PZT SAL ÇAR PER CUM CMT PAZ', 'MON TUE WED THU FRI SAT SUN').split(' ');
+const DAY_NAMES = L(
+  'Pazartesi Salı Çarşamba Perşembe Cuma Cumartesi Pazar',
+  'Monday Tuesday Wednesday Thursday Friday Saturday Sunday',
+).split(' ');
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const RING = 2 * Math.PI * 19;
 
@@ -32,7 +36,7 @@ function svg<K extends keyof SVGElementTagNameMap>(
 export class Hud {
   readonly root: HTMLElement;
   private district = h('span', { class: 'hud-district' });
-  private chip = h('span', { class: 'hud-paused', text: 'Duraklatıldı' });
+  private chip = h('span', { class: 'hud-paused', text: L('Duraklatıldı', 'Paused') });
   private score = h('strong', { id: 'hud-score', text: '0' });
   private day = h('span', { class: 'hud-day' });
   private ringFill: SVGCircleElement;
@@ -46,8 +50,8 @@ export class Hud {
       type: 'button',
       class: 'ghost',
       id: 'btn-menu',
-      'aria-label': 'Menü (Esc)',
-      title: 'Menü',
+      'aria-label': L('Menü (Esc)', 'Menu (Esc)'),
+      title: L('Menü', 'Menu'),
     });
     back.append(icon('back', 30));
     back.addEventListener('click', () => actions.openMenu());
@@ -83,7 +87,11 @@ export class Hud {
         { class: 'hud-right' },
         h(
           'span',
-          { class: 'hud-score', title: 'Tamamlanan yolculuk', 'aria-label': 'Skor' },
+          {
+            class: 'hud-score',
+            title: L('Tamamlanan yolculuk', 'Finished trips'),
+            'aria-label': L('Skor', 'Score'),
+          },
           this.score,
           icon('car', 22),
         ),
@@ -103,7 +111,7 @@ export class Hud {
     const clock = clockText(hour);
     const dayText = `${DAYS[dayIndex] ?? ''} ${clock}`;
     if (this.day.textContent !== dayText) this.day.textContent = dayText;
-    this.day.title = `${session.week}. hafta, ${DAY_NAMES[dayIndex] ?? ''} ${clock} · ${dayPart(hour)}`;
+    this.day.title = `${L(`${session.week}. hafta`, `Week ${session.week}`)}, ${DAY_NAMES[dayIndex] ?? ''} ${clock} · ${translate(dayPart(hour))}`;
     this.ringFill.setAttribute('stroke-dasharray', `${(weekPos * RING).toFixed(1)} ${RING}`);
     this.chip.hidden = state !== 'paused';
     this.score.textContent = formatNumber(session.score.score);
@@ -111,7 +119,7 @@ export class Hud {
     const running = state === 'playing';
     if (this.lastRunning !== running) {
       this.lastRunning = running;
-      const label = running ? 'Duraklat' : 'Devam';
+      const label = running ? L('Duraklat', 'Pause') : L('Devam', 'Resume');
       this.clockGlyph.replaceChildren(
         ...(running
           ? [
@@ -120,15 +128,18 @@ export class Hud {
             ]
           : [svg('path', { d: 'M20 16.5v15l12-7.5z' })]),
       );
-      this.runBtn.setAttribute('aria-label', `${label} (Boşluk)`);
-      this.runBtn.title = `${session.week}. hafta — ${label} (Boşluk)`;
+      this.runBtn.setAttribute('aria-label', `${label} (${L('Boşluk', 'Space')})`);
+      this.runBtn.title = `${L(`${session.week}. hafta`, `Week ${session.week}`)} — ${label} (${L('Boşluk', 'Space')})`;
     }
     this.runBtn.disabled = state === 'gameover';
     const speedText = `${speed}×`;
     if (this.speedBtn.textContent !== speedText) {
       this.speedBtn.textContent = speedText;
-      this.speedBtn.title = `Hız ${speedText}`;
-      this.speedBtn.setAttribute('aria-label', `Hız ${speedText}, değiştirmek için tıklayın`);
+      this.speedBtn.title = `${L('Hız', 'Speed')} ${speedText}`;
+      this.speedBtn.setAttribute(
+        'aria-label',
+        `${L('Hız', 'Speed')} ${speedText}, ${L('değiştirmek için tıklayın', 'click to change')}`,
+      );
       this.speedBtn.dataset.speed = String(speed);
     }
   }

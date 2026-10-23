@@ -257,6 +257,7 @@ const NAME_SUFFIXES: Record<BuildingKind, readonly string[]> = {
   ticari: ['Çarşısı', 'Pasajı', 'İş Merkezi', 'Pazarı', 'Ofisleri'],
   kapi: ['Bağlantısı'],
   durak: ['İskelesi', 'İstasyonu'],
+  otopark: ['Otoparkı'],
 };
 
 export function buildingName(

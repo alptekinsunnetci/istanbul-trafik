@@ -1,7 +1,7 @@
 import { DEMAND, DT, GEOM, MODES, type ModeRules, ROUTING, STATS, TRIP } from './constants';
 import { EventBus } from './event-bus';
 import { Random } from './random';
-import { type Building, type TripFailureReason, isHighwayTrip } from './world-state';
+import { type Building, type TripFailureReason, doorsOf, isHighwayTrip } from './world-state';
 import type { Grid } from '../map/grid';
 import { type GraphEdge, RoadGraph } from '../map/road-graph';
 import { buildGraph } from '../map/topology';
@@ -208,8 +208,8 @@ export class Simulation {
 
   /** Whether a house currently has a route to a workplace (cached). */
   reachable(house: Building, workplace: Building): boolean {
-    const r = this.system.routeFrom({ node: house.door }, workplace.door);
-    return r !== null && r.edges.length > 0;
+    // Any entrance counts: the workplace door or one of its car parks.
+    return this.system.bestRoute(house.door, workplace) !== null;
   }
 
   /** Workplaces with too many pins fill their overflow timer; others drain it. */
@@ -349,7 +349,11 @@ export class Simulation {
     }
 
     for (const v of this.vehicles) {
-      const dest = this.buildingById(v.destination)?.door ?? -1;
+      const b = this.buildingById(v.destination);
+      const dest =
+        b && v.destDoor >= 0 && doorsOf(b, this.buildings).includes(v.destDoor)
+          ? v.destDoor
+          : (b?.door ?? -1);
       if (v.junction) {
         if (!routeValid(next, v.route, v.routeIndex + 1, dest)) this.replanAfterJunction(v);
       } else if (v.state === 'noRoute' || !routeValid(next, v.route, v.routeIndex, dest)) {
@@ -424,7 +428,9 @@ export class Simulation {
     const to = this.graph.edge(pass.toEdge);
     const dest = this.buildings.find((b) => b.id === v.destination);
     if (!to || !dest) return;
-    const r = to.to === dest.door ? { edges: [] } : this.system.routeFrom({ edge: to }, dest.door);
+    const door =
+      v.destDoor >= 0 && doorsOf(dest, this.buildings).includes(v.destDoor) ? v.destDoor : dest.door;
+    const r = to.to === door ? { edges: [] } : this.system.routeFrom({ edge: to }, door);
     v.route = r ? [pass.fromEdge, to.id, ...r.edges] : [pass.fromEdge, to.id];
     v.routeIndex = 0;
   }

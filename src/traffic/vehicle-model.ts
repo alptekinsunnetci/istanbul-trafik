@@ -1,6 +1,7 @@
 import { VEHICLE_TYPES, type VehicleKind } from '../core/constants';
 import type { Dir } from '../map/grid';
 import type { Turn } from '../map/road-graph';
+import { L } from '../core/i18n';
 
 export type VehicleState =
   'moving' | 'following' | 'waitingJunction' | 'changingLane' | 'inJunction' | 'noRoute';
@@ -76,6 +77,8 @@ export interface Vehicle {
   paint: number;
   /** People on board (a bus from a station carries several). */
   passengers: number;
+  /** The entrance this vehicle drives to (the workplace door or one of its car parks). */
+  destDoor: number;
 }
 
 export function createVehicle(
@@ -117,21 +120,22 @@ export function createVehicle(
     rerouteTimer: (id % 20) / 5,
     paint,
     passengers: trip.passengers ?? 1,
+    destDoor: -1,
   };
 }
 
 export const VEHICLE_STATE_LABELS: Record<VehicleState, string> = {
-  moving: 'Seyir hâlinde',
-  following: 'Öndeki aracı takip ediyor',
-  waitingJunction: 'Kavşakta bekliyor',
-  changingLane: 'Şerit değiştiriyor',
-  inJunction: 'Kavşaktan geçiyor',
-  noRoute: 'Rota bulunamadı',
+  moving: L('Seyir hâlinde', 'Driving'),
+  following: L('Öndeki aracı takip ediyor', 'Following the car ahead'),
+  waitingJunction: L('Kavşakta bekliyor', 'Waiting at a junction'),
+  changingLane: L('Şerit değiştiriyor', 'Changing lanes'),
+  inJunction: L('Kavşaktan geçiyor', 'Crossing a junction'),
+  noRoute: L('Rota bulunamadı', 'No route found'),
 };
 
 export const VEHICLE_KIND_LABELS: Record<VehicleKind, string> = {
-  car: 'Otomobil',
-  taxi: 'Taksi',
-  dolmus: 'Dolmuş',
-  otobus: 'Otobüs',
+  car: L('Otomobil', 'Car'),
+  taxi: L('Taksi', 'Taxi'),
+  dolmus: L('Dolmuş', 'Shared minibus'),
+  otobus: L('Otobüs', 'Bus'),
 };

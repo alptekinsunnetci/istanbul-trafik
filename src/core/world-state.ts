@@ -1,12 +1,13 @@
 import type { VehicleKind } from './constants';
 import type { Dir } from '../map/grid';
+import { L } from './i18n';
 
 /**
  * Houses send cars; workplaces receive them. Both carry a colour group.
  * Gateways (`kapi`) sit at the map edge where a highway leaves the city;
  * they send and receive through traffic, and their `color` is only an index.
  */
-export type BuildingKind = 'konut' | 'ticari' | 'kapi' | 'durak';
+export type BuildingKind = 'konut' | 'ticari' | 'kapi' | 'durak' | 'otopark';
 
 export interface BuildingType {
   w: number;
@@ -15,14 +16,21 @@ export interface BuildingType {
 }
 
 export const BUILDING_TYPES: Record<BuildingKind, BuildingType> = {
-  konut: { w: 1, h: 1, label: 'Ev' },
-  ticari: { w: 2, h: 2, label: 'İş yeri' },
-  kapi: { w: 1, h: 1, label: 'Şehir dışı bağlantısı' },
-  durak: { w: 1, h: 1, label: 'Durak' },
+  konut: { w: 1, h: 1, label: L('Ev', 'House') },
+  ticari: { w: 2, h: 2, label: L('İş yeri', 'Workplace') },
+  kapi: { w: 1, h: 1, label: L('Şehir dışı bağlantısı', 'Highway exit') },
+  durak: { w: 1, h: 1, label: L('Durak', 'Station') },
+  otopark: { w: 1, h: 1, label: L('Otopark', 'Car park') },
 };
 
 /** Names of the colour groups, in the order they are introduced. */
-export const COLOR_NAMES: readonly string[] = ['Mercan', 'Turkuaz', 'Sarı', 'Mor', 'Yeşil'];
+export const COLOR_NAMES: readonly string[] = [
+  L('Mercan', 'Coral'),
+  L('Turkuaz', 'Turquoise'),
+  L('Sarı', 'Yellow'),
+  L('Mor', 'Purple'),
+  L('Yeşil', 'Green'),
+];
 
 export interface TripRequest {
   id: number;
@@ -33,6 +41,8 @@ export interface TripRequest {
   passengers?: number;
   /** Vehicle to send (taxi or bus from a station); random when not set. */
   kind?: VehicleKind;
+  /** Taxi or bus from a station: the houses its passengers came from. */
+  homes?: number[];
 }
 
 export type TransitMode = 'vapur' | 'metro';
@@ -79,6 +89,15 @@ export interface Building {
   overflow: number;
   /** Ferry pier or metro station (`durak`). */
   transit?: TransitStation;
+  /** Car park (`otopark`): the workplace it is a second entrance of. */
+  parkingFor?: number;
+}
+
+/** Every entrance of a building: its own door, plus the doors of its car parks. */
+export function doorsOf(b: Building, all: readonly Building[]): number[] {
+  const doors = [b.door];
+  if (b.kind === 'ticari') for (const p of all) if (p.parkingFor === b.id) doors.push(p.door);
+  return doors;
 }
 
 /**
@@ -98,6 +117,6 @@ export function buildingCells(b: Pick<Building, 'x' | 'y' | 'w' | 'h'>, width: n
 export type TripFailureReason = 'noRoute' | 'roadRemoved';
 
 export const FAILURE_LABELS: Record<TripFailureReason, string> = {
-  noRoute: 'Araç hedefine yol bulamadı',
-  roadRemoved: 'Araç silinen bir yoldaydı',
+  noRoute: L('Araç hedefine yol bulamadı', 'The vehicle found no road to its destination'),
+  roadRemoved: L('Araç silinen bir yoldaydı', 'The vehicle was on a road that was erased'),
 };

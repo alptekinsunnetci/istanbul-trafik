@@ -18,6 +18,8 @@ export default defineConfig({
   use: {
     baseURL: externalUrl ?? `http://127.0.0.1:${port}`,
     trace: 'retain-on-failure',
+    // The interface follows the browser language; tests check the Turkish texts.
+    locale: 'tr-TR',
     screenshot: 'only-on-failure',
   },
   projects: [

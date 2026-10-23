@@ -9,6 +9,7 @@ import { ACHIEVEMENTS } from '../gameplay/achievements';
 import { dailyMap } from '../gameplay/daily';
 import { Modal } from './accessibility';
 import { button, formatNumber, formatPercent, formatTime, h, icon } from './dom';
+import { L, t } from '../core/i18n';
 
 export interface MenuActions {
   continueGame(): void;
@@ -18,6 +19,7 @@ export interface MenuActions {
   openSettings(): void;
   openHelp(): void;
   startDaily(): void;
+  openEditor(): void;
 }
 
 const DOTS: Record<District['difficulty'], string> = { kolay: '●○○', orta: '●●○', zor: '●●●' };
@@ -88,7 +90,13 @@ export class MainMenu {
       'div',
       { class: 'menu-panel' },
       h('h1', { id: 'menu-title', class: 'menu-title', text: 'İstanbul Trafik' }),
-      h('p', { class: 'menu-tagline', text: 'Mahalleleri yollarla bağla. Trafik aksın, şehir büyüsün.' }),
+      h('p', {
+        class: 'menu-tagline',
+        text: L(
+          'Mahalleleri yollarla bağla. Trafik aksın, şehir büyüsün.',
+          'Link neighbourhoods with roads. Keep traffic flowing as the city grows.',
+        ),
+      }),
     );
     panel.append(
       this.view === 'home' ? this.home() : this.view === 'records' ? this.records() : this.achievements(),
@@ -103,27 +111,37 @@ export class MainMenu {
       type: 'text',
       inputmode: 'numeric',
       maxlength: 9,
-      placeholder: 'Rastgele',
+      placeholder: L('Rastgele', 'Random'),
       'aria-describedby': 'seed-help',
     });
     const seedError = h('p', { class: 'field-error', id: 'seed-error', role: 'alert' });
     const advanced = h(
       'details',
       { class: 'advanced', id: 'advanced' },
-      h('summary', { text: 'Harita tohumu' }),
+      h('summary', { text: L('Harita tohumu', 'Map seed') }),
       h(
         'div',
         { class: 'seed-row' },
-        h('label', { for: 'seed-input', class: 'sr-only', text: 'Harita tohumu' }),
+        h('label', { for: 'seed-input', class: 'sr-only', text: L('Harita tohumu', 'Map seed') }),
         seedInput,
-        h('p', { class: 'field-help', id: 'seed-help', text: 'Aynı tohum aynı haritayı ve trafiği üretir.' }),
+        h('p', {
+          class: 'field-help',
+          id: 'seed-help',
+          text: L(
+            'Aynı tohum aynı haritayı ve trafiği üretir.',
+            'The same seed gives the same map and traffic.',
+          ),
+        }),
       ),
     );
     const readSeed = (): number | null | undefined => {
       const raw = seedInput.value.trim();
       if (raw === '') return null;
       if (!/^\d{1,9}$/.test(raw)) {
-        seedError.textContent = 'Tohum 0 ile 999999999 arasında bir sayı olmalı.';
+        seedError.textContent = L(
+          'Tohum 0 ile 999999999 arasında bir sayı olmalı.',
+          'The seed must be a number from 0 to 999999999.',
+        );
         seedInput.setAttribute('aria-invalid', 'true');
         advanced.open = true;
         return undefined;
@@ -133,7 +151,11 @@ export class MainMenu {
       return Number(raw);
     };
 
-    const grid = h('div', { class: 'district-grid', role: 'list', 'aria-label': 'İlçe seçin' });
+    const grid = h('div', {
+      class: 'district-grid',
+      role: 'list',
+      'aria-label': L('İlçe seçin', 'Choose a district'),
+    });
     DISTRICTS.forEach((d, i) => {
       const best = records.bestScores[bestScoreKey(d.id, this.getMode())];
       const card = h(
@@ -168,38 +190,52 @@ export class MainMenu {
     const todayDistrict = DISTRICTS.find((d) => d.id === today.districtId);
     const todayBest = records.daily[today.key];
     const daily = button(
-      `Günün haritası · ${todayDistrict?.name ?? ''}${todayBest !== undefined ? ` · en iyi ${formatNumber(todayBest)}` : ''}`,
+      `${L('Günün haritası', 'Daily map')} · ${todayDistrict?.name ?? ''}${todayBest !== undefined ? ` · ${L('en iyi', 'best')} ${formatNumber(todayBest)}` : ''}`,
       () => this.actions.startDaily(),
       { className: 'pill daily-pill', id: 'btn-daily' },
     );
     const links = h('div', { class: 'menu-links' });
     links.append(daily);
     links.append(
-      button('Oynayarak öğren', () => this.actions.startTutorial(), {
+      button(L('Oynayarak öğren', 'Learn by playing'), () => this.actions.startTutorial(), {
         className: 'pill',
         id: 'btn-tutorial',
       }),
     );
     if (this.hasSave()) {
-      const cont = button('Kaldığın yerden devam et', () => this.actions.continueGame(), {
-        className: 'pill pill-primary',
-        id: 'btn-continue',
-      });
+      const cont = button(
+        L('Kaldığın yerden devam et', 'Continue where you left off'),
+        () => this.actions.continueGame(),
+        {
+          className: 'pill pill-primary',
+          id: 'btn-continue',
+        },
+      );
       cont.dataset.autofocus = '';
       links.append(cont);
     }
     links.append(
-      button('Skorlar', () => this.go('records'), { className: 'link', id: 'btn-records' }),
+      button(L('Skorlar', 'Scores'), () => this.go('records'), { className: 'link', id: 'btn-records' }),
       button(
-        `Başarımlar ${records.achievements.length}/${ACHIEVEMENTS.length}`,
+        `${L('Başarımlar', 'Achievements')} ${records.achievements.length}/${ACHIEVEMENTS.length}`,
         () => this.go('achievements'),
         {
           className: 'link',
           id: 'btn-achievements',
         },
       ),
-      button('Ayarlar', () => this.actions.openSettings(), { className: 'link', id: 'btn-menu-settings' }),
-      button('Nasıl oynanır?', () => this.actions.openHelp(), { className: 'link', id: 'btn-menu-help' }),
+      button(L('Harita düzenleyici', 'Map editor'), () => this.actions.openEditor(), {
+        className: 'link',
+        id: 'btn-editor',
+      }),
+      button(L('Ayarlar', 'Settings'), () => this.actions.openSettings(), {
+        className: 'link',
+        id: 'btn-menu-settings',
+      }),
+      button(L('Nasıl oynanır?', 'How to play'), () => this.actions.openHelp(), {
+        className: 'link',
+        id: 'btn-menu-help',
+      }),
     );
     return h('div', { class: 'menu-section' }, this.modePicker(), grid, seedError, links, advanced);
   }
@@ -246,12 +282,15 @@ export class MainMenu {
         ),
       );
     }
-    const back = button('Geri', () => this.go('home'), { className: 'pill' });
+    const back = button(L('Geri', 'Back'), () => this.go('home'), { className: 'pill' });
     back.dataset.autofocus = '';
     return h(
       'div',
       { class: 'menu-section' },
-      h('h2', { class: 'menu-h2', text: `Başarımlar (${have.size}/${ACHIEVEMENTS.length})` }),
+      h('h2', {
+        class: 'menu-h2',
+        text: `${L('Başarımlar', 'Achievements')} (${have.size}/${ACHIEVEMENTS.length})`,
+      }),
       list,
       back,
     );
@@ -274,7 +313,9 @@ export class MainMenu {
     }
     const history = h('ul', { class: 'records' });
     if (r.history.length === 0)
-      history.append(h('li', { class: 'muted', text: 'Henüz tamamlanmış oyun yok.' }));
+      history.append(
+        h('li', { class: 'muted', text: L('Henüz tamamlanmış oyun yok.', 'No finished games yet.') }),
+      );
     for (const s of r.history.slice(0, 8)) {
       history.append(
         h(
@@ -283,22 +324,28 @@ export class MainMenu {
           h('span', { text: s.districtName }),
           h('span', {
             class: 'muted',
-            text: `${formatNumber(s.completed)} yolculuk · ${formatTime(s.duration)}`,
+            text: `${formatNumber(s.completed)} ${L('yolculuk', 'trips')} · ${formatTime(s.duration)}`,
           }),
           h('strong', { text: formatNumber(s.score) }),
         ),
       );
     }
-    const back = button('Geri', () => this.go('home'), { className: 'pill' });
+    const back = button(L('Geri', 'Back'), () => this.go('home'), { className: 'pill' });
     back.dataset.autofocus = '';
     return h(
       'div',
       { class: 'menu-section' },
-      h('h2', { class: 'menu-h2', text: 'En iyi skorlar (Rahat · Normal · Zor)' }),
+      h('h2', {
+        class: 'menu-h2',
+        text: L('En iyi skorlar (Rahat · Normal · Zor)', 'Best scores (Relaxed · Normal · Hard)'),
+      }),
       best,
-      h('h2', { class: 'menu-h2', text: 'Son oyunlar' }),
+      h('h2', { class: 'menu-h2', text: L('Son oyunlar', 'Recent games') }),
       history,
-      h('p', { class: 'field-help', text: 'Skorlar yalnızca bu tarayıcıda saklanır.' }),
+      h('p', {
+        class: 'field-help',
+        text: L('Skorlar yalnızca bu tarayıcıda saklanır.', 'Scores are kept in this browser only.'),
+      }),
       back,
     );
   }
@@ -316,20 +363,57 @@ function bestText(r: Records, districtId: string): string {
 
 export function helpContent(): HTMLElement {
   const keys: [string, string][] = [
-    ['Binadan sürükle', 'Yol çiz: binadan başla, diğer binada bitir (su üstünde otomatik köprü)'],
-    ['Geri al (Ctrl+Z)', 'Son çizimi geri al, parçalar geri gelir'],
-    ['Sil ya da sağ tık + sürükle', 'Yolu sil (parçalar geri gelir)'],
-    ['Işık, sonra kavşağa dokun', 'Trafik ışığı koy / kaldır (4)'],
-    ['Göbek, sonra kavşağa dokun', 'Göbekli kavşak koy / kaldır (5)'],
-    ['Hat, sonra iki yer arası sürükle', 'Vapur ya da metro hattı kur; durağa dokununca kalkar (6)'],
-    ['Araca / binaya dokun', 'Ayrıntıları gör'],
-    ['Tekerlek, + / −', 'Yakınlaştır / uzaklaştır'],
-    ['Orta tık + sürükle, W A S D', 'Haritayı kaydır'],
-    ['Boşluk', 'Duraklat / devam'],
-    ['T · I · F', 'Trafik katmanı · İstatistikler · Haritayı sığdır'],
-    ['Dokunmatik', 'Tek parmak çizer, iki parmak kaydırır; silmek için silgiyi seç'],
+    [
+      L('Binadan sürükle', 'Drag from a building'),
+      L(
+        'Yol çiz: binadan başla, diğer binada bitir (su üstünde otomatik köprü)',
+        'Draw a road: start at a building, end at another (bridges over water by themselves)',
+      ),
+    ],
+    [
+      L('Geri al (Ctrl+Z)', 'Undo (Ctrl+Z)'),
+      L('Son çizimi geri al, parçalar geri gelir', 'Undo the last drawing, pieces come back'),
+    ],
+    [
+      L('Sil ya da sağ tık + sürükle', 'Erase, or right-click + drag'),
+      L('Yolu sil (parçalar geri gelir)', 'Remove the road (pieces come back)'),
+    ],
+    [
+      L('Işık, sonra kavşağa dokun', 'Light, then tap a junction'),
+      L('Trafik ışığı koy / kaldır (4)', 'Place / remove a traffic light (4)'),
+    ],
+    [
+      L('Göbek, sonra kavşağa dokun', 'Roundabout, then tap a junction'),
+      L('Göbekli kavşak koy / kaldır (5)', 'Place / remove a roundabout (5)'),
+    ],
+    [
+      L('Hat, sonra iki yer arası sürükle', 'Line, then drag between two places'),
+      L(
+        'Vapur ya da metro hattı kur; durağa dokununca kalkar (6)',
+        'Build a ferry or metro line; tap a station to remove it (6)',
+      ),
+    ],
+    [L('Araca / binaya dokun', 'Tap a vehicle / building'), L('Ayrıntıları gör', 'See details')],
+    [L('Tekerlek, + / −', 'Wheel, + / −'), L('Yakınlaştır / uzaklaştır', 'Zoom in / out')],
+    [L('Orta tık + sürükle, W A S D', 'Middle-click + drag, W A S D'), L('Haritayı kaydır', 'Move the map')],
+    [L('Boşluk', 'Space'), L('Duraklat / devam', 'Pause / resume')],
+    [
+      'T · I · F',
+      L('Trafik katmanı · İstatistikler · Haritayı sığdır', 'Traffic layer · Statistics · Fit the map'),
+    ],
+    [
+      L('Dokunmatik', 'Touch'),
+      L(
+        'Tek parmak çizer, iki parmak kaydırır; silmek için silgiyi seç',
+        'One finger draws, two fingers move the map; pick the eraser to erase',
+      ),
+    ],
   ];
-  const table = h('table', { class: 'keys' }, h('caption', { class: 'sr-only', text: 'Kontroller' }));
+  const table = h(
+    'table',
+    { class: 'keys' },
+    h('caption', { class: 'sr-only', text: L('Kontroller', 'Controls') }),
+  );
   const tbody = h('tbody');
   for (const [k, v] of keys)
     tbody.append(h('tr', {}, h('th', { scope: 'row', text: k }), h('td', { text: v })));
@@ -341,38 +425,76 @@ export function helpContent(): HTMLElement {
       'ol',
       { class: 'help-rules' },
       h('li', {
-        text: 'Evleri aynı renkteki (ve aynı sembollü) iş yerine yolla bağla. Arabalar evden iş yerine gider.',
+        text: L(
+          'Evleri aynı renkteki (ve aynı sembollü) iş yerine yolla bağla. Arabalar evden iş yerine gider.',
+          'Connect houses to the workplace of the same colour (and symbol). Cars drive from home to work.',
+        ),
       }),
       h('li', {
-        text: 'İş yerindeki beyaz noktalar bekleyen yolculuklardır. Çok birikirse çevresinde kırmızı bir halka dolar.',
+        text: L(
+          'İş yerindeki beyaz noktalar bekleyen yolculuklardır. Çok birikirse çevresinde kırmızı bir halka dolar.',
+          'Dots at a workplace are trips waiting. When too many pile up, a red ring around it fills.',
+        ),
       }),
       h('li', {
-        text: 'Halka tamamen dolarsa oyun biter (Rahat modda bitmez). Skorun, tamamlanan yolculuk sayısıdır.',
-      }),
-      h('li', { text: 'Şehir her hafta biraz büyür; soluk alan henüz kullanılamaz.' }),
-      h('li', {
-        text: `Yol parçaların sınırlı. Her hafta +${ECONOMY.weeklyRoads} yol gelir ve iki ödülden birini seçersin.`,
-      }),
-      h('li', {
-        text: 'Tıkanan yerlerde ikinci bir yol aç ya da bulvar kullan: bulvarlar iki şeritli ve daha hızlıdır.',
+        text: L(
+          'Halka tamamen dolarsa oyun biter (Rahat modda bitmez). Skorun, tamamlanan yolculuk sayısıdır.',
+          'When the ring is full the game ends (never in Relaxed mode). Your score is the number of finished trips.',
+        ),
       }),
       h('li', {
-        text: 'Işıksız kavşakta karşı yönden araç gelirse sürücüler yavaşlayıp yol verir. Kalabalık bir kavşağa trafik ışığı koy: yönler sırayla yeşil yanar.',
+        text: L(
+          'Şehir her hafta biraz büyür; soluk alan henüz kullanılamaz.',
+          'The city grows a little every week; the faded area cannot be used yet.',
+        ),
       }),
       h('li', {
-        text: 'D-100, O-1 gibi hazır otoyollar hızlıdır ve silinemez; üstlerinden şehir dışına giden gri araçlar akar. Yolunu otoyola bağlayabilirsin ama oluşan kavşak geçen trafiği de yavaşlatır.',
+        text: L(
+          `Yol parçaların sınırlı. Her hafta +${ECONOMY.weeklyRoads} yol gelir ve iki ödülden birini seçersin.`,
+          `Road pieces are limited. Every week ${ECONOMY.weeklyRoads} more arrive and you choose one of two rewards.`,
+        ),
       }),
       h('li', {
-        text: 'Dere, Haliç ya da Boğaz’ın karşı kıyısında da binalar çıkar: oraya köprüyle ulaşırsın. Otoyolun üstünden düz geçen yol üst geçit olur.',
+        text: L(
+          'Tıkanan yerlerde ikinci bir yol aç ya da bulvar kullan: bulvarlar iki şeritli ve daha hızlıdır.',
+          'Where it jams, open a second road or use a boulevard: boulevards have two lanes and are faster.',
+        ),
       }),
       h('li', {
-        text: 'Göbek: kavşağa göbek koyarsan araçlar durmadan, yavaşlayarak döner. Hat: iki yer arasında sürükleyerek vapur (su üstünden) ya da metro hattı kur; evden yürüyen yolcular karşı durakta otobüse ya da taksiye biner.',
+        text: L(
+          'Işıksız kavşakta karşı yönden araç gelirse sürücüler yavaşlayıp yol verir. Kalabalık bir kavşağa trafik ışığı koy: yönler sırayla yeşil yanar.',
+          'At a junction without lights, drivers slow down and give way to crossing traffic. Put a traffic light on a busy junction: directions take turns.',
+        ),
       }),
       h('li', {
-        text: 'Sabah ve akşam iş saatlerinde trafik artar, gece azalır. 3. haftadan sonra maç günü, yağmur ve yol çalışması gibi olaylar olur.',
+        text: L(
+          'D-100, O-1 gibi hazır otoyollar hızlıdır ve silinemez; üstlerinden şehir dışına giden gri araçlar akar. Yolunu otoyola bağlayabilirsin ama oluşan kavşak geçen trafiği de yavaşlatır.',
+          'Ready-made highways such as D-100 and O-1 are fast and cannot be erased; grey cars pass through on them. You can join your roads to a highway, but the junction slows passing traffic too.',
+        ),
       }),
       h('li', {
-        text: 'Suyun üstünde ara sıra bir martı uçar: üstüne dokunursan +2 yol parçası kazanırsın.',
+        text: L(
+          'Dere, Haliç ya da Boğaz’ın karşı kıyısında da binalar çıkar: oraya köprüyle ulaşırsın. Otoyolun üstünden düz geçen yol üst geçit olur.',
+          'Buildings also appear across streams, the Golden Horn or the Bosphorus: reach them by bridge. A road straight across a highway becomes an overpass.',
+        ),
+      }),
+      h('li', {
+        text: L(
+          'Göbek: kavşağa göbek koyarsan araçlar durmadan, yavaşlayarak döner. Hat: iki yer arasında sürükleyerek vapur (su üstünden) ya da metro hattı kur; evden yürüyen yolcular karşı durakta otobüse ya da taksiye biner.',
+          'Roundabout: cars go round without stopping, just slowing down. Line: drag between two places to build a ferry (across water) or metro line; people walk from home and take a bus or taxi at the far end.',
+        ),
+      }),
+      h('li', {
+        text: L(
+          'Sabah ve akşam iş saatlerinde trafik artar, gece azalır. 3. haftadan sonra maç günü, yağmur ve yol çalışması gibi olaylar olur.',
+          'Traffic rises in the morning and evening rush hours and drops at night. From week 3 there are events such as match days, rain and road works.',
+        ),
+      }),
+      h('li', {
+        text: L(
+          'Suyun üstünde ara sıra bir martı uçar: üstüne dokunursan +2 yol parçası kazanırsın.',
+          'Now and then a gull flies over the water: tap it to win 2 road pieces.',
+        ),
       }),
     ),
     table,
@@ -386,6 +508,7 @@ const UPGRADE_ICONS: Record<string, string> = {
   lights: 'light',
   roundabouts: 'roundabout',
   lines: 'ferry',
+  parkings: 'parking',
 };
 
 /** Weekly reward: two cards, one must be chosen (the game waits until then). */
@@ -396,7 +519,7 @@ export function upgradeDialog(
   choose: (index: number) => void,
 ): Modal {
   const modal = new Modal(
-    `${week}. hafta başladı · ${SEASONS[seasonOf(week)] ?? ''}`,
+    `${L(`${week}. hafta başladı`, `Week ${week} begins`)} · ${t(SEASONS[seasonOf(week)] ?? '')}`,
     false,
     () => undefined,
     'dialog-upgrade',
@@ -419,20 +542,98 @@ export function upgradeDialog(
     cards.append(card);
   });
   modal.panel.append(
-    h('p', { class: 'upgrade-sub', text: `+${ECONOMY.weeklyRoads} yol parçası geldi. Bir ödül daha seç:` }),
+    h('p', {
+      class: 'upgrade-sub',
+      text: L(
+        `+${ECONOMY.weeklyRoads} yol parçası geldi. Bir ödül daha seç:`,
+        `+${ECONOMY.weeklyRoads} road pieces arrived. Choose one more reward:`,
+      ),
+    }),
     cards,
   );
   modal.open(host);
   return modal;
 }
 
+/** First-visit welcome: the rules in four lines, and a recommendation to learn by playing. */
+export function introDialog(host: HTMLElement, a: { tutorial: () => void; later: () => void }): Modal {
+  const modal = new Modal(
+    L('İstanbul Trafik’e hoş geldin!', 'Welcome to İstanbul Trafik!'),
+    true,
+    () => later(),
+    'dialog-narrow',
+  );
+  modal.panel.id = 'intro-dialog';
+  const later = (): void => {
+    modal.close();
+    a.later();
+  };
+  const learn = button(
+    L('Oynayarak öğren (önerilen)', 'Learn by playing (recommended)'),
+    () => {
+      modal.close();
+      a.tutorial();
+    },
+    { className: 'pill pill-primary', id: 'btn-intro-tutorial' },
+  );
+  learn.dataset.autofocus = '';
+  modal.panel.append(
+    h(
+      'ol',
+      { class: 'help-rules' },
+      h('li', {
+        text: L(
+          'Evleri aynı renkteki iş yerine yolla bağla: binadan binaya sürükle.',
+          'Connect houses to the workplace of the same colour: drag from building to building.',
+        ),
+      }),
+      h('li', {
+        text: L(
+          'İş yerindeki noktalar bekleyen yolculuklardır; çok birikirse halka dolar.',
+          'Dots at a workplace are waiting trips; when too many pile up, its ring fills.',
+        ),
+      }),
+      h('li', {
+        text: L(
+          'Her ulaşan yolcu 1 puan. Şehir her hafta büyür, yeni parçalar gelir.',
+          'Every arrival is 1 point. The city grows every week and new pieces arrive.',
+        ),
+      }),
+      h('li', {
+        text: L(
+          'Kalabalık kavşaklara ışık ya da göbek koy; suyu vapurla, uzağı metroyla geç.',
+          'Put lights or roundabouts on busy junctions; cross water by ferry, distance by metro.',
+        ),
+      }),
+    ),
+    h('p', {
+      class: 'intro-tip',
+      text: L(
+        'İlk kez oynuyorsan 2 dakikalık rehberli oyunla başlamanı öneririz.',
+        'Playing for the first time? We recommend the 2-minute guided game.',
+      ),
+    }),
+    h(
+      'div',
+      { class: 'dialog-actions' },
+      button(L('Şimdilik geç', 'Skip for now'), later, {
+        className: 'pill pill-quiet',
+        id: 'btn-intro-later',
+      }),
+      learn,
+    ),
+  );
+  modal.open(host);
+  return modal;
+}
+
 export function openHelp(host: HTMLElement, onClose: () => void): Modal {
-  const modal = new Modal('Nasıl oynanır?', true, () => close(), 'dialog-wide');
+  const modal = new Modal(L('Nasıl oynanır?', 'How to play'), true, () => close(), 'dialog-wide');
   const close = (): void => {
     modal.close();
     onClose();
   };
-  const ok = button('Anladım', close, { className: 'pill pill-primary' });
+  const ok = button(L('Anladım', 'Got it'), close, { className: 'pill pill-primary' });
   ok.dataset.autofocus = '';
   modal.panel.append(helpContent(), h('div', { class: 'dialog-actions' }, ok));
   modal.panel.id = 'help-dialog';
@@ -461,7 +662,7 @@ export function confirmDialog(
     },
     { className: 'pill pill-primary', id: 'btn-confirm' },
   );
-  const no = button('Vazgeç', cancel, { className: 'pill' });
+  const no = button(L('Vazgeç', 'Cancel'), cancel, { className: 'pill' });
   no.dataset.autofocus = '';
   modal.panel.append(h('p', { text }), h('div', { class: 'dialog-actions' }, no, ok));
   modal.open(host);
@@ -478,24 +679,30 @@ export interface PauseActions {
 }
 
 export function pauseMenu(host: HTMLElement, a: PauseActions): Modal {
-  const modal = new Modal('Duraklatıldı', true, () => run(a.resume)(), 'dialog-narrow');
+  const modal = new Modal(L('Duraklatıldı', 'Paused'), true, () => run(a.resume)(), 'dialog-narrow');
   modal.panel.id = 'pause-menu';
   const run = (fn: () => void) => (): void => {
     modal.close();
     fn();
   };
-  const resume = button('Devam et', run(a.resume), { className: 'pill pill-primary', id: 'btn-resume' });
+  const resume = button(L('Devam et', 'Resume'), run(a.resume), {
+    className: 'pill pill-primary',
+    id: 'btn-resume',
+  });
   resume.dataset.autofocus = '';
   modal.panel.append(
     h(
       'div',
       { class: 'stack' },
       resume,
-      button('İstatistikler', run(a.stats), { className: 'pill', id: 'btn-pause-stats' }),
-      button('Yeniden başlat', run(a.restart), { className: 'pill', id: 'btn-pause-restart' }),
-      button('Ayarlar', run(a.settings), { className: 'pill', id: 'btn-pause-settings' }),
-      button('Nasıl oynanır?', run(a.help), { className: 'pill', id: 'btn-pause-help' }),
-      button('Ana menü', run(a.mainMenu), { className: 'pill pill-quiet', id: 'btn-to-menu' }),
+      button(L('İstatistikler', 'Statistics'), run(a.stats), { className: 'pill', id: 'btn-pause-stats' }),
+      button(L('Yeniden başlat', 'Restart'), run(a.restart), { className: 'pill', id: 'btn-pause-restart' }),
+      button(L('Ayarlar', 'Settings'), run(a.settings), { className: 'pill', id: 'btn-pause-settings' }),
+      button(L('Nasıl oynanır?', 'How to play'), run(a.help), { className: 'pill', id: 'btn-pause-help' }),
+      button(L('Ana menü', 'Main menu'), run(a.mainMenu), {
+        className: 'pill pill-quiet',
+        id: 'btn-to-menu',
+      }),
     ),
   );
   modal.open(host);
@@ -516,21 +723,21 @@ export function gameOverDialog(
   best: number,
   a: GameOverActions,
 ): Modal {
-  const modal = new Modal('Oyun bitti', false, () => undefined, 'dialog-narrow');
+  const modal = new Modal(L('Oyun bitti', 'Game over'), false, () => undefined, 'dialog-narrow');
   modal.panel.id = 'gameover-dialog';
   const rows: [string, string][] = [
-    ['Süre', `${formatTime(s.duration)} · ${s.week}. hafta`],
-    ['Tamamlanan yolculuk', formatNumber(s.completed)],
-    ['Başarısız yolculuk', formatNumber(s.failed)],
-    ['Ortalama yolculuk', `${formatNumber(s.averageTravelTime, 1)} sn`],
-    ['Zamanında varış', formatPercent(s.onTimeRate)],
-    ['Ağ verimliliği', formatPercent(s.efficiency)],
-    ['En uzun kuyruk', `${formatNumber(s.longestQueue)} araç`],
+    [L('Süre', 'Time'), `${formatTime(s.duration)} · ${L(`${s.week}. hafta`, `week ${s.week}`)}`],
+    [L('Tamamlanan yolculuk', 'Finished trips'), formatNumber(s.completed)],
+    [L('Başarısız yolculuk', 'Failed trips'), formatNumber(s.failed)],
+    [L('Ortalama yolculuk', 'Average trip'), `${formatNumber(s.averageTravelTime, 1)} ${L('sn', 's')}`],
+    [L('Zamanında varış', 'On time'), formatPercent(s.onTimeRate)],
+    [L('Ağ verimliliği', 'Network efficiency'), formatPercent(s.efficiency)],
+    [L('En uzun kuyruk', 'Longest queue'), `${formatNumber(s.longestQueue)} ${L('araç', 'vehicles')}`],
   ];
   const dl = h('dl', { class: 'summary' });
   for (const [k, v] of rows) dl.append(h('dt', { text: k }), h('dd', { text: v }));
   const again = button(
-    'Tekrar oyna',
+    L('Tekrar oyna', 'Play again'),
     () => {
       modal.close();
       a.again();
@@ -543,16 +750,22 @@ export function gameOverDialog(
       'div',
       { class: 'final-score' },
       h('strong', { id: 'final-score', text: formatNumber(s.score) }),
-      h('span', { text: newBest ? 'yolculuk · yeni rekor!' : `yolculuk · en iyi ${formatNumber(best)}` }),
+      h('span', {
+        text: newBest
+          ? L('yolculuk · yeni rekor!', 'trips · new record!')
+          : `${L('yolculuk · en iyi', 'trips · best')} ${formatNumber(best)}`,
+      }),
     ),
     h('p', { class: 'gameover-reason', text: s.reason }),
     dl,
     h(
       'div',
       { class: 'dialog-actions' },
-      ...(a.share ? [button('Paylaş', () => a.share?.(), { className: 'pill', id: 'btn-share' })] : []),
+      ...(a.share
+        ? [button(L('Paylaş', 'Share'), () => a.share?.(), { className: 'pill', id: 'btn-share' })]
+        : []),
       button(
-        'Başka ilçe',
+        L('Başka ilçe', 'Other district'),
         () => {
           modal.close();
           a.otherDistrict();

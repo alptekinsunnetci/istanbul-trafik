@@ -1,3 +1,4 @@
+import { L } from './i18n';
 /**
  * Central tuning configuration. Every balance coefficient lives here so that
  * gameplay can be tuned without touching simulation code.
@@ -287,8 +288,8 @@ export interface ModeRules {
 
 export const MODES: Record<GameMode, ModeRules> = {
   rahat: {
-    label: 'Rahat',
-    text: 'Oyun bitmez, sakin tempo',
+    label: L('Rahat', 'Relaxed'),
+    text: L('Oyun bitmez, sakin tempo', 'Never ends, calm pace'),
     pinIntervalFactor: 1.7,
     overflowPins: 9,
     overflowTime: 60,
@@ -296,15 +297,15 @@ export const MODES: Record<GameMode, ModeRules> = {
   },
   normal: {
     label: 'Normal',
-    text: 'Dengeli tempo',
+    text: L('Dengeli tempo', 'Balanced pace'),
     pinIntervalFactor: 1.25,
     overflowPins: 8,
     overflowTime: 75,
     endless: false,
   },
   zor: {
-    label: 'Zor',
-    text: 'Hızlı tempo',
+    label: L('Zor', 'Hard'),
+    text: L('Hızlı tempo', 'Fast pace'),
     pinIntervalFactor: 1,
     overflowPins: 7,
     overflowTime: 45,
@@ -350,18 +351,56 @@ export const ECONOMY = {
   startLights: 2,
   startRoundabouts: 1,
   startLines: 1,
+  startParkings: 1,
 } as const;
 
-export type ResourceKind = 'roads' | 'bridges' | 'boulevards' | 'lights' | 'roundabouts' | 'lines';
+export type ResourceKind =
+  'roads' | 'bridges' | 'boulevards' | 'lights' | 'roundabouts' | 'lines' | 'parkings';
 
 /** Weekly reward options; two are offered at random each week. */
 export const UPGRADES: readonly { kind: ResourceKind; amount: number; label: string; text: string }[] = [
-  { kind: 'roads', amount: 15, label: '+15 yol', text: 'Daha fazla yol parçası' },
-  { kind: 'bridges', amount: 5, label: '+5 köprü', text: 'Suyun ya da otoyolun üstünden geçmek için' },
-  { kind: 'boulevards', amount: 10, label: '+10 bulvar', text: 'İki şeritli, hızlı yollar' },
-  { kind: 'lights', amount: 2, label: '+2 trafik ışığı', text: 'Kalabalık kavşakları sırayla akıt' },
-  { kind: 'roundabouts', amount: 2, label: '+2 göbek', text: 'Durmadan dönülen göbekli kavşak' },
-  { kind: 'lines', amount: 1, label: '+1 vapur/metro hattı', text: 'Yolcuları arabasız taşı' },
+  {
+    kind: 'roads',
+    amount: 15,
+    label: L('+15 yol', '+15 roads'),
+    text: L('Daha fazla yol parçası', 'More road pieces'),
+  },
+  {
+    kind: 'bridges',
+    amount: 5,
+    label: L('+5 köprü', '+5 bridges'),
+    text: L('Suyun ya da otoyolun üstünden geçmek için', 'To cross water or a highway'),
+  },
+  {
+    kind: 'boulevards',
+    amount: 10,
+    label: L('+10 bulvar', '+10 boulevards'),
+    text: L('İki şeritli, hızlı yollar', 'Two-lane, faster roads'),
+  },
+  {
+    kind: 'lights',
+    amount: 2,
+    label: L('+2 trafik ışığı', '+2 traffic lights'),
+    text: L('Kalabalık kavşakları sırayla akıt', 'Let busy junctions take turns'),
+  },
+  {
+    kind: 'roundabouts',
+    amount: 2,
+    label: L('+2 göbek', '+2 roundabouts'),
+    text: L('Durmadan dönülen göbekli kavşak', 'A junction you drive round without stopping'),
+  },
+  {
+    kind: 'lines',
+    amount: 1,
+    label: L('+1 vapur/metro hattı', '+1 ferry/metro line'),
+    text: L('Yolcuları arabasız taşı', 'Carry people without cars'),
+  },
+  {
+    kind: 'parkings',
+    amount: 1,
+    label: L('+1 otopark', '+1 car park'),
+    text: L('İş yerine ikinci bir giriş', 'A second entrance for a workplace'),
+  },
 ];
 
 /** A trip is "on time" if travel time ≤ freeFlow × factor + slack (statistics only). */ export const TRIP = {

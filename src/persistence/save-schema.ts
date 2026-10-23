@@ -17,6 +17,7 @@ import type { Turn } from '../map/road-graph';
 import type { JunctionPass, LaneChange, Vehicle, VehicleState } from '../traffic/vehicle-model';
 import type { TrailingHold } from '../traffic/vehicle-system';
 import { arr, bool, int, nullable, num, obj, oneOf, str } from './validate';
+import { type Lang, getLang } from '../core/i18n';
 
 const GAME_MODES: readonly GameMode[] = ['rahat', 'normal', 'zor'];
 
@@ -42,6 +43,10 @@ export interface Settings {
   invertZoom: boolean;
   /** Last chosen difficulty mode. */
   mode: GameMode;
+  /** The first-visit welcome has been shown. */
+  seenIntro: boolean;
+  /** Interface language. */
+  lang: Lang;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -55,6 +60,9 @@ export const DEFAULT_SETTINGS: Settings = {
   panSpeed: 1,
   invertZoom: false,
   mode: DEFAULT_MODE,
+  seenIntro: false,
+  // The language picked at start-up (browser language unless chosen before).
+  lang: getLang(),
 };
 
 export function parseSettings(raw: unknown): Settings {
@@ -70,6 +78,8 @@ export function parseSettings(raw: unknown): Settings {
     panSpeed: num(o.panSpeed, 'panSpeed', 0.5, 2),
     invertZoom: bool(o.invertZoom, 'invertZoom'),
     mode: oneOf(o.mode, 'mode', GAME_MODES),
+    seenIntro: o.seenIntro === undefined ? false : bool(o.seenIntro, 'seenIntro'),
+    lang: o.lang === undefined ? getLang() : oneOf(o.lang, 'lang', ['tr', 'en'] as const),
   };
 }
 
@@ -193,6 +203,15 @@ export interface SavedGame {
   trailing: TrailingHold[];
   stats: SimStats;
   junctionDelay: [string, number][];
+  /** Map editor games: the map's share code. */
+  customMap?: string;
+  /** City life that continues after loading (older saves have none). */
+  ambience?: {
+    nextGullAt: number;
+    nextEventAt: number;
+    gull: { x: number; y: number; vx: number; vy: number; age: number; calls: number } | null;
+    event: { kind: 'mac' | 'yagmur' | 'yol'; until: number; target: number; text: string } | null;
+  };
 }
 
 const RESOURCE_KINDS: readonly ResourceKind[] = [
@@ -202,6 +221,7 @@ const RESOURCE_KINDS: readonly ResourceKind[] = [
   'lights',
   'roundabouts',
   'lines',
+  'parkings',
 ];
 
 function parseBounds(raw: unknown, width: number, height: number): Bounds {
@@ -225,6 +245,7 @@ function parseResources(raw: unknown, p: string): Resources {
     lights: int(o.lights, `${p}.lights`, 0, 1_000_000),
     roundabouts: o.roundabouts === undefined ? 0 : int(o.roundabouts, `${p}.roundabouts`, 0, 1_000_000),
     lines: o.lines === undefined ? 0 : int(o.lines, `${p}.lines`, 0, 1_000_000),
+    parkings: o.parkings === undefined ? 0 : int(o.parkings, `${p}.parkings`, 0, 1_000_000),
   };
 }
 
@@ -248,7 +269,7 @@ const VEHICLE_STATES: readonly VehicleState[] = [
   'noRoute',
 ];
 const KINDS = Object.keys(VEHICLE_TYPES) as VehicleKind[];
-const BUILDING_KINDS: readonly BuildingKind[] = ['konut', 'ticari', 'kapi', 'durak'];
+const BUILDING_KINDS: readonly BuildingKind[] = ['konut', 'ticari', 'kapi', 'durak', 'otopark'];
 
 function dir(v: unknown, p: string): Dir {
   return int(v, p, 0, 3) as Dir;
@@ -269,6 +290,9 @@ function parseTrip(raw: unknown, p: string): TripRequest {
     createdAt: num(o.createdAt, `${p}.createdAt`),
     ...(o.passengers === undefined ? {} : { passengers: int(o.passengers, `${p}.passengers`, 1, 50) }),
     ...(o.kind === undefined ? {} : { kind: oneOf(o.kind, `${p}.kind`, KINDS) }),
+    ...(o.homes === undefined
+      ? {}
+      : { homes: arr(o.homes, `${p}.homes`, 50).map((h, i) => int(h, `${p}.homes[${i}]`, 0, 10_000)) }),
   };
 }
 
@@ -309,6 +333,7 @@ function parseBuilding(raw: unknown, p: string, cells: number): Building {
     pinTimer: num(o.pinTimer, `${p}.pinTimer`, -1000, 1000),
     overflow: num(o.overflow, `${p}.overflow`, 0, 1),
     ...(o.transit === undefined ? {} : { transit: parseStation(o.transit, `${p}.transit`) }),
+    ...(o.parkingFor === undefined ? {} : { parkingFor: int(o.parkingFor, `${p}.parkingFor`, 0, 10_000) }),
   };
 }
 
@@ -372,6 +397,7 @@ function parseVehicle(raw: unknown, p: string): Vehicle {
     rerouteTimer: num(o.rerouteTimer, `${p}.rerouteTimer`),
     paint: num(o.paint, `${p}.paint`, 0, 1),
     passengers: o.passengers === undefined ? 1 : int(o.passengers, `${p}.passengers`, 1, 50),
+    destDoor: o.destDoor === undefined ? -1 : int(o.destDoor, `${p}.destDoor`, -1, 70_000),
   };
 }
 
@@ -482,5 +508,35 @@ export function parseSavedGame(raw: unknown): SavedGame {
         number,
       ];
     }),
+    ...(o.ambience === undefined ? {} : { ambience: parseAmbience(o.ambience) }),
+    ...(o.customMap === undefined ? {} : { customMap: str(o.customMap, 'customMap', 40_000) }),
+  };
+}
+
+function parseAmbience(raw: unknown): NonNullable<SavedGame['ambience']> {
+  const o = obj(raw, 'ambience');
+  const g = o.gull === null || o.gull === undefined ? null : obj(o.gull, 'ambience.gull');
+  const e = o.event === null || o.event === undefined ? null : obj(o.event, 'ambience.event');
+  return {
+    nextGullAt: num(o.nextGullAt, 'ambience.nextGullAt', 0),
+    nextEventAt: num(o.nextEventAt, 'ambience.nextEventAt', 0),
+    gull: g
+      ? {
+          x: num(g.x, 'ambience.gull.x'),
+          y: num(g.y, 'ambience.gull.y'),
+          vx: num(g.vx, 'ambience.gull.vx', -100, 100),
+          vy: num(g.vy, 'ambience.gull.vy', -100, 100),
+          age: num(g.age, 'ambience.gull.age', 0),
+          calls: int(g.calls, 'ambience.gull.calls', 0, 10),
+        }
+      : null,
+    event: e
+      ? {
+          kind: oneOf(e.kind, 'ambience.event.kind', ['mac', 'yagmur', 'yol'] as const),
+          until: num(e.until, 'ambience.event.until', 0),
+          target: int(e.target, 'ambience.event.target', -1, 70_000),
+          text: str(e.text, 'ambience.event.text', 200),
+        }
+      : null,
   };
 }

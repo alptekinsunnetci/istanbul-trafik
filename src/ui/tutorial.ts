@@ -1,4 +1,5 @@
 import { button, h } from './dom';
+import { L } from '../core/i18n';
 
 export interface CoachAction {
   label: string;
@@ -16,7 +17,7 @@ export class CoachCard {
   private actions = h('div', { class: 'coach-actions' });
 
   constructor(onSkip: () => void) {
-    const skip = button('Geç', onSkip, { className: 'link', id: 'btn-coach-skip' });
+    const skip = button(L('Geç', 'Skip'), onSkip, { className: 'link', id: 'btn-coach-skip' });
     this.root.append(h('div', { class: 'coach-head' }, this.stepEl, skip), this.textEl, this.actions);
   }
 

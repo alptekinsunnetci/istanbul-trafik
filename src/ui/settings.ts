@@ -2,6 +2,7 @@ import { DEFAULT_SETTINGS, type ReduceMotion, type Settings } from '../persisten
 import type { WriteResult } from '../persistence/save-manager';
 import { Modal } from './accessibility';
 import { button, h } from './dom';
+import { L } from '../core/i18n';
 
 function checkbox(
   id: string,
@@ -51,7 +52,7 @@ export function openSettings(
   onClose: () => void,
   soundSupported: boolean,
 ): Modal {
-  const modal = new Modal('Ayarlar', true, () => close());
+  const modal = new Modal(L('Ayarlar', 'Settings'), true, () => close());
   modal.panel.id = 'settings-dialog';
   const close = (): void => {
     modal.close();
@@ -59,39 +60,52 @@ export function openSettings(
   };
   const volume = range(
     'set-volume',
-    'Ses düzeyi',
+    L('Ses düzeyi', 'Volume'),
     0,
     100,
     5,
     Math.round(current.volume * 100),
     (v) => `%${v}`,
   );
-  const music = range('set-music', 'Müzik', 0, 100, 5, Math.round(current.music * 100), (v) =>
-    v === 0 ? 'Kapalı' : `%${v}`,
+  const music = range('set-music', L('Müzik', 'Music'), 0, 100, 5, Math.round(current.music * 100), (v) =>
+    v === 0 ? L('Kapalı', 'Off') : `%${v}`,
   );
-  const muted = checkbox('set-muted', 'Sesleri kapat', current.muted);
+  const muted = checkbox('set-muted', L('Sesleri kapat', 'Mute'), current.muted);
   const motionSelect = h('select', { id: 'set-motion' });
   for (const [v, label] of [
-    ['system', 'Sistem tercihine uy'],
-    ['on', 'Hareketi azalt'],
-    ['off', 'Tüm animasyonlar'],
+    ['system', L('Sistem tercihine uy', 'Follow system setting')],
+    ['on', L('Hareketi azalt', 'Reduce motion')],
+    ['off', L('Tüm animasyonlar', 'All animations')],
   ] as const) {
     const o = h('option', { value: v, text: label });
     if (v === current.reduceMotion) o.selected = true;
     motionSelect.append(o);
   }
-  const contrast = checkbox('set-contrast', 'Yüksek kontrast', current.highContrast);
-  const grid = checkbox('set-grid', 'Izgara noktalarını göster', current.showGrid);
+  const contrast = checkbox('set-contrast', L('Yüksek kontrast', 'High contrast'), current.highContrast);
+  const grid = checkbox('set-grid', L('Izgara noktalarını göster', 'Show the grid'), current.showGrid);
   const pan = range(
     'set-pan',
-    'Klavye ile kaydırma hızı',
+    L('Klavye ile kaydırma hızı', 'Keyboard pan speed'),
     50,
     200,
     10,
     Math.round(current.panSpeed * 100),
     (v) => `%${v}`,
   );
-  const invert = checkbox('set-invert', 'Tekerlek yakınlaştırma yönünü ters çevir', current.invertZoom);
+  const invert = checkbox(
+    'set-invert',
+    L('Tekerlek yakınlaştırma yönünü ters çevir', 'Invert wheel zoom'),
+    current.invertZoom,
+  );
+  const langSelect = h('select', { id: 'set-lang' });
+  for (const [v, label] of [
+    ['tr', 'Türkçe'],
+    ['en', 'English'],
+  ] as const) {
+    const o = h('option', { value: v, text: label });
+    if (v === current.lang) o.selected = true;
+    langSelect.append(o);
+  }
   const status = h('p', { class: 'field-status', role: 'status' });
 
   const read = (): Settings => ({
@@ -105,24 +119,32 @@ export function openSettings(
     panSpeed: Math.min(2, Math.max(0.5, Number(pan.input.value) / 100)),
     invertZoom: invert.input.checked,
     mode: current.mode,
+    seenIntro: current.seenIntro,
+    lang: langSelect.value === 'en' ? 'en' : 'tr',
   });
 
   const save = button(
-    'Kaydet',
+    L('Kaydet', 'Save'),
     () => {
-      const r = apply(read());
+      const next = read();
+      const r = apply(next);
+      // A new language takes effect after a reload (labels are made at start-up).
+      if (r.ok && next.lang !== current.lang) {
+        window.location.reload();
+        return;
+      }
       if (r.ok) {
-        status.textContent = 'Ayarlar kaydedildi.';
+        status.textContent = L('Ayarlar kaydedildi.', 'Settings saved.');
         status.dataset.kind = 'ok';
       } else {
-        status.textContent = `Ayarlar uygulandı ancak kaydedilemedi: ${r.error ?? ''}`;
+        status.textContent = `${L('Ayarlar uygulandı ancak kaydedilemedi', 'Settings applied but could not be saved')}: ${r.error ?? ''}`;
         status.dataset.kind = 'error';
       }
     },
     { className: 'pill pill-primary', id: 'btn-save-settings' },
   );
   const reset = button(
-    'Varsayılanlar',
+    L('Varsayılanlar', 'Defaults'),
     () => {
       volume.input.value = String(DEFAULT_SETTINGS.volume * 100);
       volume.input.dispatchEvent(new Event('input'));
@@ -135,20 +157,36 @@ export function openSettings(
       pan.input.value = String(DEFAULT_SETTINGS.panSpeed * 100);
       pan.input.dispatchEvent(new Event('input'));
       invert.input.checked = DEFAULT_SETTINGS.invertZoom;
-      status.textContent = 'Varsayılan değerler yüklendi; uygulamak için Kaydet’e basın.';
+      status.textContent = L(
+        'Varsayılan değerler yüklendi; uygulamak için Kaydet’e basın.',
+        'Defaults loaded; press Save to apply.',
+      );
       status.dataset.kind = '';
     },
     { className: 'pill pill-quiet' },
   );
-  const closeBtn = button('Kapat', close, { className: 'pill', id: 'btn-close-settings' });
+  const closeBtn = button(L('Kapat', 'Close'), close, { className: 'pill', id: 'btn-close-settings' });
 
-  const soundFields = h('fieldset', {}, h('legend', { text: 'Ses' }), volume.row, music.row, muted.row);
+  const soundFields = h(
+    'fieldset',
+    {},
+    h('legend', { text: L('Ses', 'Sound') }),
+    volume.row,
+    music.row,
+    muted.row,
+  );
   if (!soundSupported) {
     volume.input.disabled = true;
     music.input.disabled = true;
     muted.input.disabled = true;
     soundFields.append(
-      h('p', { class: 'field-help', text: 'Bu tarayıcı Web Audio desteklemiyor; sesler çalınamaz.' }),
+      h('p', {
+        class: 'field-help',
+        text: L(
+          'Bu tarayıcı Web Audio desteklemiyor; sesler çalınamaz.',
+          'This browser does not support Web Audio; no sound can play.',
+        ),
+      }),
     );
   }
   volume.input.dataset.autofocus = '';
@@ -157,12 +195,18 @@ export function openSettings(
     h(
       'fieldset',
       {},
-      h('legend', { text: 'Görüntü' }),
-      h('div', { class: 'field' }, h('label', { for: 'set-motion', text: 'Animasyonlar' }), motionSelect),
+      h('legend', { text: L('Görüntü', 'Display') }),
+      h('div', { class: 'field' }, h('label', { for: 'set-lang', text: 'Dil / Language' }), langSelect),
+      h(
+        'div',
+        { class: 'field' },
+        h('label', { for: 'set-motion', text: L('Animasyonlar', 'Animations') }),
+        motionSelect,
+      ),
       contrast.row,
       grid.row,
     ),
-    h('fieldset', {}, h('legend', { text: 'Kontroller' }), pan.row, invert.row),
+    h('fieldset', {}, h('legend', { text: L('Kontroller', 'Controls') }), pan.row, invert.row),
     status,
     h('div', { class: 'dialog-actions' }, reset, closeBtn, save),
   );

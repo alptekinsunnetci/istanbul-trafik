@@ -106,9 +106,11 @@ export function playBot(
           ? 'roads'
           : r.bridges < 2 && s.usesBridges
             ? 'bridges'
-            : r.lights < 1
-              ? 'lights'
-              : 'roads';
+            : r.lines < 1
+              ? 'lines'
+              : r.lights < 1
+                ? 'lights'
+                : 'roads';
       const i = s.pendingUpgrades.findIndex((u) => u.kind === want);
       s.chooseUpgrade(i >= 0 ? i : 0);
     }
@@ -135,9 +137,29 @@ export function playBot(
       houses.sort((a, b) => Math.hypot(a.x - w.x, a.y - w.y) - Math.hypot(b.x - w.x, b.y - w.y));
       for (const h of houses.slice(0, 3)) if (connect(s, h, w)) break;
     }
-    if (s.resources.lights > 0) {
-      const j = busiestJunction(s);
-      if (j !== null) s.edit('signal', [j]);
+    // Busy junctions get a light, or a roundabout when no light is left (not on highways).
+    const j = busiestJunction(s);
+    if (j !== null) {
+      if (s.resources.lights > 0) s.edit('signal', [j]);
+      else if (s.resources.roundabouts > 0 && !s.sim.grid.isHighway(j)) s.edit('roundabout', [j]);
+    }
+    // A house it could not link by road: put a ferry/metro line from next to it to its workplace.
+    if (s.resources.lines > 0) {
+      const lonely = s.sim.buildings.find(
+        (h) =>
+          h.kind === 'konut' &&
+          !works.some((w) => w.color === h.color && s.sim.reachable(h, w)) &&
+          s.sim.time - h.createdAt > 20,
+      );
+      const target = lonely && works.find((w) => w.color === lonely.color);
+      if (lonely && target) {
+        const g = s.sim.grid;
+        const r = s.edit('transit', [g.idx(lonely.x, lonely.y), g.idx(target.x, target.y)]);
+        if (r.ok) {
+          const far = s.sim.buildings.filter((b) => b.kind === 'durak').at(-1);
+          if (far) connect(s, far, target);
+        }
+      }
     }
   }
   const g = s.sim.grid;

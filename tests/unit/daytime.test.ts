@@ -3,6 +3,9 @@ import { EVENTS } from '../../src/core/constants';
 import { DAY_LENGTH, clockText, darkness, demandFactor, hourAt } from '../../src/gameplay/daytime';
 import { type CityEvent, GameSession } from '../../src/gameplay/game-session';
 import { connectAll, play } from '../helpers';
+import { restoreSession, toSnapshot } from '../../src/gameplay/snapshot';
+import { parseSavedGame } from '../../src/persistence/save-schema';
+import { migrateSave } from '../../src/persistence/migrations';
 
 describe('time of day', () => {
   it('every day starts at 06:00 and runs through 24 hours', () => {
@@ -51,6 +54,27 @@ describe('city events', () => {
     expect(seen.length).toBeGreaterThanOrEqual(5);
     expect(new Set(seen.map((e) => e.kind)).size).toBe(3);
     expect(rain && closed).toBe(true);
+    s.dispose();
+  });
+
+  it('an event going on (and a flying gull) survives saving and loading', () => {
+    const s = new GameSession({ districtId: 'besiktas', seed: 9, mode: 'rahat' });
+    connectAll(s);
+    s.start();
+    // Play on until road works are going on.
+    let guard = 0;
+    while (s.event?.kind !== 'yol' && guard++ < 40_000) {
+      if (s.pendingUpgrades) s.chooseUpgrade(0);
+      s.step();
+    }
+    expect(s.event?.kind).toBe('yol');
+    const save = parseSavedGame(migrateSave(JSON.parse(JSON.stringify(toSnapshot(s)))));
+    const back = restoreSession(save);
+    expect(back.event).toEqual(s.event);
+    expect(back.sim.grid.closed[s.event!.target]).toBe(1);
+    expect(back.nextEventAt).toBe(s.nextEventAt);
+    expect(back.nextGullAt).toBe(s.nextGullAt);
+    back.dispose();
     s.dispose();
   });
 });

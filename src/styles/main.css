@@ -475,6 +475,15 @@ button {
 
 /* ---------------------------------------------------------------- piece badges */
 
+/* Wide screens: the drawer's tools sit in the dock like the others, the "more" button is not needed. */
+.dock-drawer {
+  display: contents;
+}
+
+.dock-wrap .badge-wrap:has(#btn-more-tools) {
+  display: none;
+}
+
 .dock-wrap {
   position: absolute;
   left: 50%;
@@ -989,6 +998,14 @@ input[aria-invalid='true'] {
   background: color-mix(in srgb, var(--paper) 70%, #f6c445);
 }
 
+.intro-tip {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--paper) 80%, #f6c445);
+  font-weight: 600;
+}
+
 .daily-pill {
   font-weight: 700;
 }
@@ -1216,7 +1233,28 @@ input[aria-invalid='true'] {
   .dock-wrap {
     bottom: 18px;
   }
-  /* Up to eight tools must fit a phone screen side by side. */
+  /* Phones: light, roundabout and line fold into a drawer above the dock. */
+  .dock {
+    position: relative;
+  }
+  .dock-wrap .badge-wrap:has(#btn-more-tools) {
+    display: grid;
+  }
+  .dock-drawer {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 10px);
+    right: 0;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: var(--paper);
+    box-shadow: 0 6px 20px rgb(0 0 0 / 18%);
+  }
+  .dock-drawer.open {
+    display: flex;
+  }
+  /* The remaining tools fit a phone screen side by side. */
   .dock {
     gap: 7px;
   }
@@ -1363,4 +1401,49 @@ input[aria-invalid='true'] {
 
 .coach-actions:not(:empty) {
   margin-top: 12px;
+}
+
+/* ------------------------------------------------------------- map editor */
+
+.editor-screen {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: var(--bg, #f3e9dc);
+  display: grid;
+  justify-items: center;
+  padding: 16px;
+}
+
+.editor-panel {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  max-width: 680px;
+  width: 100%;
+}
+
+.editor-title {
+  font-size: 1.8rem;
+}
+
+.editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.editor-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.editor-canvas {
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+  touch-action: none;
+  cursor: crosshair;
 }

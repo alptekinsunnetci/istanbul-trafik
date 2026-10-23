@@ -12,6 +12,7 @@ import {
   parseSavedGame,
   parseSettings,
 } from './save-schema';
+import { L } from '../core/i18n';
 
 export const STORAGE_KEYS = {
   settings: 'istanbul-trafik:settings',
@@ -65,9 +66,9 @@ export function browserStorage(): KeyValueStore | null {
 
 function describeWriteError(err: unknown): string {
   if (err instanceof DOMException && (err.name === 'QuotaExceededError' || err.code === 22)) {
-    return 'Tarayıcı depolama alanı dolu.';
+    return L('Tarayıcı depolama alanı dolu.', 'Browser storage is full.');
   }
-  return 'Tarayıcı depolamasına yazılamadı.';
+  return L('Tarayıcı depolamasına yazılamadı.', 'Could not write to browser storage.');
 }
 
 /**
@@ -93,7 +94,11 @@ export class SaveManager {
   }
 
   private write(key: string, value: unknown): WriteResult {
-    if (!this.store) return { ok: false, error: 'Tarayıcı depolaması kullanılamıyor.' };
+    if (!this.store)
+      return {
+        ok: false,
+        error: L('Tarayıcı depolaması kullanılamıyor.', 'Browser storage is not available.'),
+      };
     try {
       this.store.setItem(key, JSON.stringify(value));
       return { ok: true };
@@ -120,7 +125,10 @@ export class SaveManager {
       this.discard(STORAGE_KEYS.settings);
       return {
         value: { ...DEFAULT_SETTINGS },
-        warning: 'Kayıtlı ayarlar bozuktu; varsayılan ayarlara dönüldü.',
+        warning: L(
+          'Kayıtlı ayarlar bozuktu; varsayılan ayarlara dönüldü.',
+          'Saved settings were damaged; defaults restored.',
+        ),
       };
     }
   }
@@ -137,7 +145,13 @@ export class SaveManager {
     } catch (err) {
       console.warn('Skor kayıtları okunamadı', err);
       this.discard(STORAGE_KEYS.records);
-      return { value: emptyRecords(), warning: 'Skor kayıtları bozuktu ve sıfırlandı.' };
+      return {
+        value: emptyRecords(),
+        warning: L(
+          'Skor kayıtları bozuktu ve sıfırlandı.',
+          'Score records were damaged and have been reset.',
+        ),
+      };
     }
   }
 
@@ -179,7 +193,13 @@ export class SaveManager {
     } catch (err) {
       console.warn('Oyun kaydı okunamadı', err);
       this.discard(STORAGE_KEYS.save);
-      return { value: null, warning: 'Kayıtlı oyun bozuk veya uyumsuzdu ve silindi.' };
+      return {
+        value: null,
+        warning: L(
+          'Kayıtlı oyun bozuk veya uyumsuzdu ve silindi.',
+          'The saved game was damaged or incompatible and has been removed.',
+        ),
+      };
     }
   }
 

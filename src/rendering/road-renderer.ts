@@ -3,7 +3,7 @@ import { GEOM } from '../core/constants';
 import { diagonalRuns } from '../map/geometry';
 import { DIRS, DX, DY, type Dir, type Grid, opposite } from '../map/grid';
 import type { RoadGraph } from '../map/road-graph';
-import type { Theme } from './theme';
+import { type Theme, shade } from './theme';
 
 const C = GEOM.cellSize;
 const STREET_WIDTH = 8.6;
@@ -16,7 +16,7 @@ const TAPER_LENGTH = C * 1.3;
 const TAPER_WIDTH = 3.4;
 /** Road ring and green island of a roundabout (m). */
 const ROUNDABOUT_RING = 9.5;
-const ROUNDABOUT_ISLAND = 3.4;
+const ROUNDABOUT_ISLAND = 3.8;
 /** Highways run on past the map edge where they leave the city. */
 const OFF_MAP = C * 40;
 
@@ -189,13 +189,22 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme, graph?: RoadGra
     const half = HIGHWAY_WIDTH / 2 + 4;
     const [ax, ay, bx, by] = vertical ? [cx, cy - half, cx, cy + half] : [cx - half, cy, cx + half, cy];
     const w = grid.lanes[grid.neighbor(c, street)] === 2 ? BOULEVARD_WIDTH : STREET_WIDTH;
-    g.moveTo(ax + 2.5, ay + 2.5)
-      .lineTo(bx + 2.5, by + 2.5)
-      .stroke({ width: w + 4, color: theme.shadow, alpha: 0.25, cap: 'butt' });
+    // Soft shadow on the highway below, a thin dark edge, the deck, and white parapets.
+    g.moveTo(ax + 1.8, ay + 2.2)
+      .lineTo(bx + 1.8, by + 2.2)
+      .stroke({ width: w + 3, color: theme.shadow, alpha: 0.18, cap: 'butt' });
     g.moveTo(ax, ay)
       .lineTo(bx, by)
-      .stroke({ width: w + 4, color: theme.bridgeEdge, cap: 'butt' });
+      .stroke({ width: w + 2.4, color: theme.bridgeEdge, cap: 'butt' });
     g.moveTo(ax, ay).lineTo(bx, by).stroke({ width: w, color: theme.road, cap: 'butt' });
+    const px = vertical ? 1 : 0;
+    const py = vertical ? 0 : 1;
+    for (const side of [-1, 1]) {
+      const o = side * (w / 2 + 0.6);
+      g.moveTo(ax + px * o, ay + py * o)
+        .lineTo(bx + px * o, by + py * o)
+        .stroke({ width: 0.9, color: theme.highwayEdge, cap: 'butt' });
+    }
   }
   for (const i of lone) {
     const [x, y] = center(grid, i);
@@ -221,7 +230,18 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme, graph?: RoadGra
     if (grid.roundabout[i] !== 1 || !grid.isRoad(i)) continue;
     const [x, y] = center(grid, i);
     g.circle(x, y, ROUNDABOUT_RING).fill(theme.road);
-    g.circle(x, y, ROUNDABOUT_ISLAND).fill(theme.park).stroke({ width: 1.2, color: theme.marking });
+    // Dashed lane line around the island.
+    const lane = (ROUNDABOUT_RING + ROUNDABOUT_ISLAND) / 2;
+    for (let k = 0; k < 12; k += 1) {
+      const a0 = (k / 12) * Math.PI * 2;
+      const a1 = a0 + Math.PI / 14;
+      g.moveTo(x + Math.cos(a0) * lane, y + Math.sin(a0) * lane).arc(x, y, lane, a0, a1);
+    }
+    g.stroke({ width: 0.8, color: theme.marking, alpha: 0.85 });
+    // A green island with a white kerb and a small tree in the middle.
+    g.circle(x, y, ROUNDABOUT_ISLAND + 0.8).fill(theme.marking);
+    g.circle(x, y, ROUNDABOUT_ISLAND).fill(theme.park);
+    g.circle(x, y, ROUNDABOUT_ISLAND * 0.45).fill(shade(theme.park, 0.75));
   }
 
   // One-way arrows.

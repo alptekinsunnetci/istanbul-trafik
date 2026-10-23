@@ -215,6 +215,29 @@ Bu son iki ayardan sonra ölçüm tekrarlanmadı.
   kaydedilir. Sayfa çevrimiçiyken ağdan, değilse önbellekten gelir; hash'li varlıklar önbellekten
   sunulur. Nginx `sw.js` ve manifesti `no-cache` ile sunar. `?e2e` testlerinde kayıt yapılmaz.
 
+## Otopark, harita düzenleyici, diller
+
+- **Otopark** (`otopark` binası, `parkingFor`, `doorsOf`): Bir iş yerinin yanına kurulan 1×1 bina; kendi
+  kapısı iş yerinin ikinci girişidir. Araç çıkarken iş yerinin bütün girişlerine rota hesaplanır, en ucuzu
+  seçilir (`Vehicle.destDoor`); puan, `incoming` ve raptiyeler iş yerine sayılır. Otopark kaldırılırsa
+  yoldaki araçlar asıl kapıya yeniden rota çizer. `Simulation.reachable` herhangi bir girişi sayar.
+- **Harita düzenleyici** (`src/map/custom-map.ts`, `src/ui/map-editor.ts`): 64×64 hücrelik arazi, otoyol
+  çoklu çizgileri, başlangıç noktası ve ad. Harita `v1.` ile başlayan kısa bir koda paketlenir (arazi
+  için run-length + base64url, gerisi JSON) ve `#harita=<kod>` bağlantısıyla paylaşılır. Oynanacak harita
+  sıradan bir `District`'e çevrilip `registerDistrict` ile kaydedilir; kayıtlı oyun haritanın kodunu da
+  saklar (`SavedGame.customMap`), böylece yüklenince harita yeniden kurulur.
+- **Diller** (`src/core/i18n.ts`): `L('türkçe', 'english')` çağrı yerinde, `t()` sabit etiketler için.
+  Dil, diğer her modülden önce yüklenen `src/app/lang-boot.ts` içinde seçilir (adres `?lang=`, kayıtlı
+  ayar, tarayıcı dili); yükleme sırasında oluşturulan etiketler bu yüzden doğru dilde olur. Ayarlardan dil
+  değişince sayfa yeniden yüklenir. Yer adları çevrilmez. Testler `tr-TR` yerel ayarıyla çalışır.
+- **İlk ziyaret:** Ayarlarda `seenIntro` yoksa menünün üstünde kısa bir karşılama penceresi açılır ve
+  rehberli oyunu önerir; bir kez gösterilir. Test adreslerinde (`?e2e`) yalnızca `intro` ile açılır.
+- **Telefon araç çubuğu:** Dar ekranda ışık, göbek, hat ve otopark "Diğer" düğmesinin açtığı bir
+  çekmecede durur; geniş ekranda çubukta yan yana görünürler.
+- **Kayıt tutarlılığı:** Süren olay (yağmur, yol çalışması, maç), uçan martı ve bir sonraki olay/martı
+  zamanı kayda yazılır (`SavedGame.ambience`). Bir hat kaldırılınca hattaki ve durakta bekleyen herkes
+  evine döner ve arabayla yeniden yola çıkar (`TripRequest.homes`); kimse kaybolmaz.
+
 ## Şehir hayatı
 
 - **Martılar** (`GameSession.gull`, `AMBIENCE`): İlk martı 30. saniyede, sonra 40–80 sn aralıklarla, oyun
@@ -244,9 +267,10 @@ Bu son iki ayardan sonra ölçüm tekrarlanmadı.
   hücreler bina ve parkların etrafından dolaşılarak doldurulur.
 - **Geri al:** Her çizimden önce yol katmanları ve parçalar saklanır (en fazla 30 adım; hafta başında
   sıfırlanır). Geri almada bina girişleri her zaman korunur.
-- **Rehberli öğretici:** Sabit Kadıköy haritasında 7 adım (bağla → ilk araba → diğer evler → geri
-  al/sil → trafik ışığı → otoyol ve üst geçit → köprü). Son üç adım okunup geçilebilir; ışık adımı bir
-  ışık konunca kendiliğinden ilerler. Hedef evler başlangıçta sabitlenir, şehir büyüse de değişmez. Haftalık ödül penceresi bir
+- **Rehberli öğretici:** Sabit Kadıköy haritasında 10 adım (bağla → ilk araba → diğer evler → geri
+  al/sil → trafik ışığı → göbek → vapur/metro hattı → otoyol ve üst geçit → köprü → günün saati ve
+  olaylar). Işık, göbek ve hat adımları ilgili şey yapılınca kendiliğinden ilerler; hepsi "Sonraki" ile
+  geçilebilir. Hedef evler başlangıçta sabitlenir, şehir büyüse de değişmez. Haftalık ödül penceresi bir
   çizim sürerken açılmaz, çizim bitince gelir.
 - **Geri bildirim:** Bağlanmamış binaların girişinde renkli halka, her teslimatta "+1", rozetlerin altında
   metin etiketleri.
