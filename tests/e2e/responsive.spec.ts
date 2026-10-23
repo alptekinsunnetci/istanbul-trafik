@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('phone layout: menu, map and toolbar fit without horizontal scrolling', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/?e2e');
+  await page.goto('./?e2e');
   await page.locator('#advanced summary').click();
   await page.locator('#seed-input').fill('3');
   await page.locator('[data-district="kadikoy"]').click();

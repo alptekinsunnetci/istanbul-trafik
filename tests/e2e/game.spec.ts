@@ -51,7 +51,7 @@ async function drawBetween(page: Page, a: number, b: number): Promise<void> {
 }
 
 async function startDistrict(page: Page, district = 'kadikoy', seed = '12345'): Promise<void> {
-  await page.goto('/?e2e');
+  await page.goto('./?e2e');
   await expect(page.locator('#menu-title')).toHaveText('İstanbul Trafik');
   await page.locator('#advanced summary').click();
   await page.locator('#seed-input').fill(seed);
@@ -77,7 +77,7 @@ test.afterEach(() => {
 });
 
 test('opens the main menu and lists Istanbul districts', async ({ page }) => {
-  await page.goto('/?e2e');
+  await page.goto('./?e2e');
   await expect(page).toHaveTitle('İstanbul Trafik');
   for (const name of ['Kadıköy', 'Beşiktaş', 'Üsküdar', 'Fatih', 'Şişli', 'Bakırköy']) {
     await expect(page.locator('.district-card', { hasText: name })).toBeVisible();
@@ -86,7 +86,7 @@ test('opens the main menu and lists Istanbul districts', async ({ page }) => {
 });
 
 test('rejects an invalid seed with a visible message', async ({ page }) => {
-  await page.goto('/?e2e');
+  await page.goto('./?e2e');
   await page.locator('#advanced summary').click();
   await page.locator('#seed-input').fill('abc');
   await page.locator('[data-district="fatih"]').click();
@@ -183,7 +183,7 @@ test('inspect a vehicle shows its route details', async ({ page }) => {
 });
 
 test('settings open, save and persist across reloads', async ({ page }) => {
-  await page.goto('/?e2e');
+  await page.goto('./?e2e');
   await page.locator('#btn-menu-settings').click();
   await expect(page.locator('#settings-dialog')).toBeVisible();
   // The faint grid is on by default.
@@ -270,7 +270,7 @@ test('a weekly reward is offered and choosing one adds pieces', async ({ page })
 
 test('guided tutorial: connect the highlighted house, then the others', async ({ page }) => {
   test.setTimeout(150_000);
-  await page.goto('/?e2e');
+  await page.goto('./?e2e');
   await page.locator('#btn-tutorial').click();
   await expect(page.locator('#coach')).toBeVisible();
   await expect(page.locator('#coach')).toContainText('1/4');
@@ -318,7 +318,7 @@ test('undo removes the last road and returns its pieces', async ({ page }) => {
 });
 
 test('difficulty mode can be chosen and is remembered', async ({ page }) => {
-  await page.goto('/?e2e');
+  await page.goto('./?e2e');
   await expect(page.locator('[data-mode="normal"]')).toHaveAttribute('aria-checked', 'true');
   await page.locator('[data-mode="rahat"]').click();
   await expect(page.locator('[data-mode="rahat"]')).toHaveAttribute('aria-checked', 'true');

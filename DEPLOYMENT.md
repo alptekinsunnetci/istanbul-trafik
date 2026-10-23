@@ -212,6 +212,21 @@ konsolunda hata olmadığını doğrulayın.
 
 ---
 
+## GitHub Pages (ücretsiz demo)
+
+Oyun statik olduğu için GitHub Pages'te sunucu olmadan yayınlanır:
+https://alptekinsunnetci.github.io/istanbul-trafik/
+
+- `.github/workflows/pages.yml`, `main` dalına yapılan her gönderimde `npm ci`, `npm run check`
+  (tip denetimi, lint, biçim, testler) ve `npm run build` çalıştırır, ardından `dist/` klasörünü
+  Pages'e yükler. Denetimlerden biri başarısız olursa yayın yapılmaz.
+- Depo ayarlarında **Settings → Pages → Source: GitHub Actions** seçili olmalıdır.
+- Vite `base: './'` kullandığı için derleme alt yolda (`/istanbul-trafik/`) değişiklik gerektirmeden
+  çalışır.
+- GitHub Pages özel HTTP başlığı (CSP, önbellek kuralları) desteklemez; bunlar yalnızca Nginx
+  kurulumunda geçerlidir. Kayıtlar tarayıcının `localStorage`'ında, `alptekinsunnetci.github.io`
+  kökeni altında tutulur.
+
 ## 13. Güncelleme ve geri dönüş
 
 ### Docker (yol A)
