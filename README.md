@@ -57,9 +57,13 @@ yeni renkler eklenir.
 | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
 | ![Sokağın D-100'e bağlandığı kavşak ve ışıklı kavşak](docs/screenshots/otoyol-kavsagi.png) | ![Bakırköy'de otoyol, dere köprüsü ve deniz](docs/screenshots/bakirkoy.png) |
 
-| Ana menü                                                                                  |
-| ----------------------------------------------------------------------------------------- |
-| ![İlçe seçimi, zorluk modları ve otoyollu harita önizlemeleri](docs/screenshots/menu.png) |
+| Beyoğlu: Haliç üstünde bir martı ve ışıklı kavşak                              | Sarıyer: Boğaz ve mevsimle gelen haftalık ödül                           |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| ![Beyoğlu'nda Tarlabaşı Bulvarı, Haliç ve martı](docs/screenshots/beyoglu.png) | ![Sarıyer'de 2. hafta: yaz ve ödül seçimi](docs/screenshots/sariyer.png) |
+
+| Ana menü: 12 ilçe                                                                |
+| -------------------------------------------------------------------------------- |
+| ![İlçe seçimi, zorluk modları ve harita önizlemeleri](docs/screenshots/menu.png) |
 
 ## Gereksinimler
 
