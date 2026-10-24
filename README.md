@@ -33,7 +33,9 @@ yeni renkler eklenir.
   gider, bir kısmı otoyola bağladığın ev ve iş yerlerine girer, bir kısmı da iş yerlerinden çıkıp
   otoyola katılır. Skora sayılmazlar ama yolları doldururlar.
 - **Çapraz yollar:** Çapraz sürüklediğin yol 45° düz bir yol olarak kurulur; araçlar da çaprazdan
-  gider ve yol gerçekten kısalır. Çapraz bir adım, düz bir adım kadar (1 yol parçası) tutar.
+  gider ve yol gerçekten kısalır. Çapraz bir adım, düz bir adım kadar (1 yol parçası) tutar. Elin biraz
+  titrese de çizgi düzgün çıkar, çizerken önizleme kurulacak çapraz çizgiyi gösterir; çapraz yol bir
+  kavşaktan doğrudan başlayabilir ve ortasına yan yol bağlanınca çizgisi kaymaz.
 - **Vapur ve metro hatları:** Hat aracıyla iki yer arasında sürükle: su üstünden geçen hat vapur
   (iki iskele), karadaki hat metro (iki istasyon) olur. Hattın bir ucuna yürüme mesafesindeki evlerin
   yolcuları arabaya binmez, yürür; vapur ya da metro tarifeyle (vapur 15 sn, metro 8 sn arayla) gelir ve

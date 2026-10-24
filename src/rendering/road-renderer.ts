@@ -1,6 +1,6 @@
 import type { Graphics } from 'pixi.js';
 import { GEOM } from '../core/constants';
-import { diagonalRuns } from '../map/geometry';
+import { chainRuns } from '../map/geometry';
 import { DIRS, DX, DY, type Dir, type Grid, opposite } from '../map/grid';
 import type { RoadGraph } from '../map/road-graph';
 import { type Theme, shade } from './theme';
@@ -49,7 +49,7 @@ export function drawRoads(g: Graphics, grid: Grid, theme: Theme, graph?: RoadGra
   const pairKey = (a: number, b: number): number => Math.min(a, b) * grid.size + Math.max(a, b);
   for (const edge of graph?.edgeList ?? []) {
     if (edge.twin !== null && edge.twin < edge.id) continue;
-    for (const [a, b] of diagonalRuns(edge.dirs)) {
+    for (const [a, b] of chainRuns(grid, edge.cells, edge.dirs)) {
       const from = edge.cells[a] as number;
       const to = edge.cells[b] as number;
       let water = false;

@@ -48,6 +48,7 @@ import {
   toggleRoundabout,
   toggleSignal,
   smoothStroke,
+  straightenDiagonals,
   toggleOneWay,
 } from '../map/road-editor';
 import { pinsAt } from '../traffic/demand-generator';
@@ -996,10 +997,11 @@ export class GameSession {
     } else {
       for (const c of raw) if (c >= 0 && grid.building[c] === -1) snapped.push(c);
     }
-    const smooth = smoothStroke(
+    let smooth = smoothStroke(
       grid,
       snapped.filter((c) => c >= 0),
     );
+    if (tool === 'road') smooth = straightenDiagonals(grid, smooth);
     const cells: number[] = [];
     let clipped = false;
     for (const c of smooth) {

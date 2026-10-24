@@ -53,11 +53,22 @@ app ──► ui ──► rendering ──► (salt okuma) gameplay ─► traf
    bildirilir. Rota önbelleğinde yalnızca değişen kenarları kullanan kayıtlar geçersiz kılınır.
    Geçersizleşen rotalar yeniden planlanır.
 
-- **Çapraz yollar** (`diagonalRuns`, `centerline`): Izgara 4 yönlü kalır; çapraz sürükleme bir merdiven
-  (doğu, güney, doğu, güney …) üretir. En az üç ardışık dönüşümlü adım düz 45° bir çizgiye çevrilir:
-  araçlar o çizgide gider, yol öyle çizilir ve kenar uzunluğu gerçek (kısa) uzunluktur. Zincirin ilk ve
-  son adımı düz kalır; böylece kavşaklara hep dik girilir. `stepPos`, her hücrenin çizgi üzerindeki
-  konumunu tutar; ağ yeniden kurulunca araçlar bu konumla yeni kenara taşınır.
+- **Çapraz yollar** (`diagonalRuns`, `chainRuns`, `centerline`): Izgara 4 yönlü kalır; çapraz sürükleme
+  bir merdiven (doğu, güney, doğu, güney …) üretir. En az üç ardışık dönüşümlü adım düz 45° bir çizgiye
+  çevrilir: araçlar o çizgide gider, yol öyle çizilir ve kenar uzunluğu gerçek (kısa) uzunluktur.
+  - Çapraz bir kavşaktan ya da çıkmaz uçtan doğrudan başlayabilir; otoyol ve göbek uçlarında ilk/son
+    adım düz kalır, böylece onlara dik girilir.
+  - Tek sayıda adımlı bir merdiven iki türlü döşenebilir (çift ya da tek hücrelerden geçen çizgi).
+    Seçim yöne bağlı değildir (`chainRuns` zinciri hep aynı uçtan okur), bu yüzden çift yönlü yolun iki
+    şeridi aynı çizgiyi izler. Önce çizimden kalan ücretsiz köşe hücreleri (`paid = 0`) bakılır: ortasına
+    yan yol bağlanıp ikiye bölünen çapraz, oyuncunun çizdiği çizgide kalır.
+  - Elle çizilen çapraz titrer (doğu, güney, güney, doğu): `straightenDiagonals`, üçten uzun düz parçası
+    olmayan ve bütünde 45° giden bir bölümü aynı iki uç arasında düzgün merdivenle yeniden döşer (yeni
+    hücreler boşsa ve aynı mevcut yollardan geçiyorsa). Önizleme köşe hücrelerini atlar ve kurulacak
+    çizgiyi gösterir.
+  - Şerit yolundaki her kırılma (düz → çapraz, köşeler) 5 m'lik kısa bir eğriyle yumuşatılır; araçlar
+    birden dönmez. `stepPos`, her hücrenin çizgi üzerindeki konumunu tutar; ağ yeniden kurulunca araçlar
+    bu konumla yeni kenara taşınır.
 
 ## Araç dinamiği
 

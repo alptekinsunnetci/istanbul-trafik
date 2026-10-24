@@ -1,5 +1,5 @@
 import type { ResourceKind } from '../core/constants';
-import { diagonalRuns } from './geometry';
+import { chainRuns } from './geometry';
 import { type Dir, type Grid, Terrain, dirBetween, opposite } from './grid';
 import { L } from '../core/i18n';
 
@@ -145,6 +145,77 @@ export function smoothStroke(grid: Grid, cells: readonly number[]): number[] {
   return out;
 }
 
+/**
+ * Hand-drawn diagonals wobble: the pointer slips to the other side of the
+ * line now and then and the staircase gets a double step (east, south,
+ * south, east). A stretch without straight runs of three or more that heads
+ * at 45° on the whole is laid again as an even staircase between the same two
+ * cells, as long as the new cells are free and the same existing roads are
+ * crossed.
+ */
+export function straightenDiagonals(grid: Grid, cells: readonly number[]): number[] {
+  const out = [...cells];
+  const dirs: Dir[] = [];
+  for (let k = 1; k < cells.length; k++) {
+    const d = stepDir(grid, cells[k - 1] as number, cells[k] as number);
+    if (d === null) return out;
+    dirs.push(d);
+  }
+  const m = dirs.length;
+  // Length of the run of equal steps each step belongs to.
+  const run = new Array<number>(m).fill(0);
+  for (let k = 0; k < m;) {
+    let j = k;
+    while (j < m && dirs[j] === dirs[k]) j++;
+    run.fill(j - k, k, j);
+    k = j;
+  }
+  let k = 0;
+  while (k < m) {
+    if ((run[k] as number) > 2) {
+      k++;
+      continue;
+    }
+    const a = dirs[k] as Dir;
+    let b: Dir | null = null;
+    let j = k;
+    for (; j < m && (run[j] as number) <= 2; j++) {
+      const d = dirs[j] as Dir;
+      if (d === a || d === b) continue;
+      if (b !== null || d === opposite(a)) break;
+      b = d;
+    }
+    if (b !== null && j - k >= 4) relay(grid, out, dirs, k, j, a, b);
+    k = j;
+  }
+  return out;
+}
+
+/** Re-lays steps k..j-1 of the stroke as an alternating staircase, if that is allowed. */
+function relay(grid: Grid, out: number[], dirs: readonly Dir[], k: number, j: number, a: Dir, b: Dir): void {
+  let na = 0;
+  for (let q = k; q < j; q++) if (dirs[q] === a) na++;
+  const nb = j - k - na;
+  if (Math.abs(na - nb) > 1) return;
+  // The more frequent step goes first; with a tie the stroke keeps its first step.
+  let next = nb > na ? b : a;
+  const cells: number[] = [];
+  let c = out[k] as number;
+  for (let q = k; q < j - 1; q++) {
+    c = grid.neighbor(c, next);
+    if (c < 0) return;
+    cells.push(c);
+    next = next === a ? b : a;
+  }
+  const old = out.slice(k + 1, j);
+  if (cells.every((x, q) => x === old[q])) return;
+  const oldSet = new Set(old);
+  const newSet = new Set(cells);
+  for (const x of cells) if (isObstacle(grid, x) || (grid.isRoad(x) && !oldSet.has(x))) return;
+  for (const x of old) if (grid.isRoad(x) && !newSet.has(x)) return;
+  for (let q = 0; q < cells.length; q++) out[k + 1 + q] = cells[q] as number;
+}
+
 function stepDir(grid: Grid, a: number, b: number): Dir | null {
   return dirBetween(grid.cx(b) - grid.cx(a), grid.cy(b) - grid.cy(a));
 }
@@ -190,7 +261,7 @@ export function previewBuild(grid: Grid, stroke: readonly number[], budget: Reso
   }
   const free = new Uint8Array(stroke.length);
   if (dirs.length === stroke.length - 1)
-    for (const [a, b] of diagonalRuns(dirs)) for (let k = a + 1; k < b; k += 2) free[k] = 1;
+    for (const [a, b] of chainRuns(grid, stroke, dirs)) for (let k = a + 1; k < b; k += 2) free[k] = 1;
   for (let k = 0; k < stroke.length; k++) {
     const c = stroke[k] as number;
     if (blocked) {

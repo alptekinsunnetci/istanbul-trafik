@@ -1,5 +1,5 @@
 import { GEOM } from '../core/constants';
-import { DX, DY, type Dir, type Grid } from './grid';
+import { DX, DY, type Dir, type Grid, opposite } from './grid';
 import { type GraphEdge, laneOffset } from './road-graph';
 
 export interface Pose {
@@ -22,28 +22,91 @@ function cellCenter(grid: Grid, i: number): [number, number] {
   return [(grid.cx(i) + 0.5) * GEOM.cellSize, (grid.cy(i) + 0.5) * GEOM.cellSize];
 }
 
+export interface RunOptions {
+  /** The chain may start (end) with a diagonal: its end cell is a plain junction or a dead end. */
+  openStart?: boolean;
+  openEnd?: boolean;
+  /**
+   * True for chain cell k when it is a free corner cell of a diagonal built
+   * earlier: it shows which of the two possible lines the player drew.
+   */
+  corner?: (k: number) => boolean;
+}
+
 /**
  * Diagonal stretches of a cell chain: a staircase of at least three
  * alternating steps (e.g. east, south, east, south) is driven and drawn as a
  * straight 45° line. Returned as [first cell, last cell] index pairs; every
- * diagonal covers an even number of steps. The first and the last step of a
- * chain stay straight, so roads always leave and enter junctions head-on.
+ * diagonal covers an even number of steps. Unless the options open them, the
+ * first and the last step of a chain stay straight (roads meet highways and
+ * roundabouts head-on).
+ *
+ * A staircase with an odd number of steps can be laid two ways, through its
+ * even or through its odd cells. The free corner cells left by the player's
+ * drawing decide; otherwise the longer line wins, then the one that reaches
+ * an open end of the chain (so a junction in the middle of a diagonal does
+ * not push the line sideways).
  */
-export function diagonalRuns(dirs: readonly Dir[]): [number, number][] {
+export function diagonalRuns(dirs: readonly Dir[], opts: RunOptions = {}): [number, number][] {
   const m = dirs.length;
+  const lo = opts.openStart ? 0 : 1;
+  const hi = opts.openEnd ? m : m - 1;
   const runs: [number, number][] = [];
-  let i = 1;
-  while (i < m - 1) {
+  let i = lo;
+  while (i < hi) {
     let L = 1;
-    while (i + L < m - 1 && dirs[i + L] !== dirs[i + L - 1] && (L < 2 || dirs[i + L] === dirs[i + L - 2]))
-      L++;
-    if (L >= 3) {
-      const span = Math.floor(L / 2) * 2;
-      runs.push([i, i + span]);
-      i += span;
-    } else i++;
+    while (i + L < hi && dirs[i + L] !== dirs[i + L - 1] && (L < 2 || dirs[i + L] === dirs[i + L - 2])) L++;
+    if (L < 3) {
+      i++;
+      continue;
+    }
+    let best: [number, number] = [i, i];
+    let bestScore = -1;
+    for (const s of [i, i + 1]) {
+      const span = Math.floor((i + L - s) / 2) * 2;
+      if (span < 2) continue;
+      let corners = 0;
+      if (opts.corner) for (let k = s + 1; k < s + span; k += 2) if (opts.corner(k)) corners++;
+      const reachesEnd = s === 0 || s + span === m;
+      const score = corners * 1000 + span * 10 + (reachesEnd ? 2 : s === i ? 1 : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        best = [s, s + span];
+      }
+    }
+    runs.push(best);
+    i = best[1];
   }
   return runs;
+}
+
+/** A diagonal may start right at a junction, but not at a highway or a roundabout. */
+function openEnd(grid: Grid, cell: number): boolean {
+  return !grid.isHighway(cell) && grid.roundabout[cell] !== 1;
+}
+
+/**
+ * Diagonal runs of a road chain on the grid. The result does not depend on
+ * the direction the chain is walked in, so both directions of a two-way road
+ * follow the same line.
+ */
+export function chainRuns(grid: Grid, cells: readonly number[], dirs: readonly Dir[]): [number, number][] {
+  const n = cells.length;
+  if (n < 4 || dirs.length !== n - 1) return [];
+  const first = cells[0] as number;
+  const last = cells[n - 1] as number;
+  const flip = first > last || (first === last && (cells[1] as number) > (cells[n - 2] as number));
+  const cs = flip ? [...cells].reverse() : cells;
+  const ds = flip ? dirs.map((d) => opposite(d)).reverse() : dirs;
+  const runs = diagonalRuns(ds, {
+    openStart: openEnd(grid, cs[0] as number),
+    openEnd: openEnd(grid, cs[n - 1] as number),
+    corner: (k) => {
+      const c = cs[k] as number;
+      return grid.road[c] === 1 && grid.paid[c] === 0 && grid.locked[c] === 0;
+    },
+  });
+  return flip ? runs.map(([a, b]): [number, number] => [n - 1 - b, n - 1 - a]).reverse() : runs;
 }
 
 export interface Centerline {
@@ -58,7 +121,7 @@ export interface Centerline {
 /** Centre line of a cell chain with its staircases straightened into diagonals. */
 export function centerline(grid: Grid, cells: readonly number[], dirs: readonly Dir[]): Centerline {
   const inside = new Uint8Array(cells.length);
-  for (const [a, b] of diagonalRuns(dirs)) for (let k = a + 1; k < b; k++) inside[k] = 1;
+  for (const [a, b] of chainRuns(grid, cells, dirs)) for (let k = a + 1; k < b; k++) inside[k] = 1;
   const xs: number[] = [];
   const ys: number[] = [];
   const stepPos: number[] = new Array<number>(cells.length).fill(0);
@@ -124,6 +187,7 @@ export function buildLanePath(grid: Grid, edge: GraphEdge, lane: number): LanePa
   px.push((vx[last] as number) - (DX[dl] as number) * R + nlx * off);
   py.push((vy[last] as number) - (DY[dl] as number) * R + nly * off);
 
+  roundBends(px, py);
   const n = px.length;
   const xs = new Float64Array(px);
   const ys = new Float64Array(py);
@@ -134,6 +198,50 @@ export function buildLanePath(grid: Grid, edge: GraphEdge, lane: number): LanePa
       Math.hypot((xs[k] as number) - (xs[k - 1] as number), (ys[k] as number) - (ys[k - 1] as number));
   }
   return { xs, ys, cum, length: cum[n - 1] as number };
+}
+
+/** How far before and after a bend in a lane the curve starts (m). */
+const BEND_CUT = 5;
+
+/**
+ * Replaces every bend of a polyline (e.g. where a straight road turns into a
+ * diagonal) with a short curve, so vehicles turn smoothly instead of
+ * snapping to the new heading.
+ */
+function roundBends(px: number[], py: number[]): void {
+  const xs = [px[0] as number];
+  const ys = [py[0] as number];
+  for (let k = 1; k < px.length - 1; k++) {
+    const x = px[k] as number;
+    const y = py[k] as number;
+    const ax = x - (px[k - 1] as number);
+    const ay = y - (py[k - 1] as number);
+    const bx = (px[k + 1] as number) - x;
+    const by = (py[k + 1] as number) - y;
+    const la = Math.hypot(ax, ay);
+    const lb = Math.hypot(bx, by);
+    if (la < 1e-6 || lb < 1e-6 || (ax * bx + ay * by) / (la * lb) > 0.9999) {
+      xs.push(x);
+      ys.push(y);
+      continue;
+    }
+    // Quadratic curve from a point before the bend to one after it, pulled towards the bend.
+    const cut = Math.min(BEND_CUT, la / 2, lb / 2);
+    const sx = x - (ax / la) * cut;
+    const sy = y - (ay / la) * cut;
+    const ex = x + (bx / lb) * cut;
+    const ey = y + (by / lb) * cut;
+    for (let j = 0; j <= 4; j++) {
+      const t = j / 4;
+      const u = 1 - t;
+      xs.push(u * u * sx + 2 * u * t * x + t * t * ex);
+      ys.push(u * u * sy + 2 * u * t * y + t * t * ey);
+    }
+  }
+  xs.push(px[px.length - 1] as number);
+  ys.push(py[py.length - 1] as number);
+  px.splice(0, px.length, ...xs);
+  py.splice(0, py.length, ...ys);
 }
 
 /** Pose at a fraction t ∈ [0,1] of the path length. */

@@ -10,7 +10,11 @@ import { type PathCache, vehiclePose } from './vehicle-renderer';
 
 const C = GEOM.cellSize;
 
-/** Ghost of the road being drawn (or erased); invalid cells get a red cross. */
+/**
+ * Ghost of the road being drawn (or erased); invalid cells get a red cross.
+ * Free corner cells of a diagonal are skipped, so the ghost shows the 45°
+ * line that will be built rather than its staircase.
+ */
 export function drawPreview(
   g: Graphics,
   grid: Grid,
@@ -23,6 +27,7 @@ export function drawPreview(
   const center = (c: number): [number, number] => [(grid.cx(c) + 0.5) * C, (grid.cy(c) + 0.5) * C];
   let prev: PreviewCell | null = null;
   for (const p of cells) {
+    if (p.free && p.valid) continue;
     const [x, y] = center(p.cell);
     if (prev && prev.valid && p.valid) {
       const [px, py] = center(prev.cell);
@@ -34,7 +39,7 @@ export function drawPreview(
   for (const p of cells) {
     const [x, y] = center(p.cell);
     if (p.valid) {
-      g.circle(x, y, 3.7).fill({ color, alpha: 0.45 });
+      if (!p.free) g.circle(x, y, 3.7).fill({ color, alpha: 0.45 });
       continue;
     }
     const s = 3.2;
